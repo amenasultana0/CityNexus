@@ -1,0 +1,2 @@
+total_reviews,negative_reviews,time_waste_pct,booking_failure_pct,repeated_attempts_pct,cancellation_pct,dissatisfied_pct,avg_rating
+1019,110,3.1,0.4,0.7,0.9,10.8,4.54

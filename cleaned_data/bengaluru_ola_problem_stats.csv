@@ -1,0 +1,2 @@
+dataset,total_rides,success_rate_pct,driver_cancellation_rate_pct,customer_cancellation_rate_pct,total_failure_rate_pct,avg_time_per_successful_booking_min,estimated_time_wasted_per_cancellation_min,peak_cancellation_rate_pct,non_peak_cancellation_rate_pct,peak_hour_cancellation_increase_pct,peak_hour_fare_increase_pct,customers_with_multiple_cancellations_pct,one_in_x_bookings_fail
+Bengaluru Ola 2024,49999,67.0,19.2,7.6,33.0,26.0,34.04597389798113,19.2,19.2,-0.0,-0.0,0.0,5.0
