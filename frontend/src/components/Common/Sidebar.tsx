@@ -47,9 +47,24 @@ const Sidebar = () => {
         <DrawerContent maxW="xs">
           <DrawerCloseTrigger />
           <DrawerBody>
-            <Flex flexDir="column" justify="space-between">
-              <Box>
+            <Flex flexDir="column" h="100%">
+              {/* Logo Section */}
+              <Box p={4} borderBottomWidth="1px" mb={4}>
+                <Text fontSize="2xl" fontWeight="bold" color="teal.400">
+                  CityNexus
+                </Text>
+                <Text fontSize="xs" color="gray.500" letterSpacing="wider">
+                  RIDE INTELLIGENCE
+                </Text>
+              </Box>
+
+              {/* Navigation */}
+              <Box flex="1" overflowY="auto">
                 <SidebarItems onClose={() => setOpen(false)} />
+              </Box>
+
+              {/* Logout and User Info */}
+              <Box borderTopWidth="1px" pt={4}>
                 <Flex
                   as="button"
                   onClick={() => {
@@ -59,16 +74,17 @@ const Sidebar = () => {
                   gap={4}
                   px={4}
                   py={2}
+                  w="100%"
                 >
                   <FiLogOut />
                   <Text>Log Out</Text>
                 </Flex>
+                {currentUser?.email && (
+                  <Text fontSize="sm" p={2} truncate maxW="sm">
+                    Logged in as: {currentUser.email}
+                  </Text>
+                )}
               </Box>
-              {currentUser?.email && (
-                <Text fontSize="sm" p={2} truncate maxW="sm">
-                  Logged in as: {currentUser.email}
-                </Text>
-              )}
             </Flex>
           </DrawerBody>
           <DrawerCloseTrigger />
@@ -84,10 +100,33 @@ const Sidebar = () => {
         top={0}
         minW="xs"
         h="100vh"
-        p={4}
+        flexDir="column"
       >
-        <Box w="100%">
+        {/* Logo Section */}
+        <Box p={6} borderBottomWidth="1px">
+          <Text fontSize="2xl" fontWeight="bold" color="teal.400">
+            CityNexus
+          </Text>
+          <Text fontSize="xs" color="gray.500" letterSpacing="wider">
+            RIDE INTELLIGENCE
+          </Text>
+        </Box>
+
+        {/* Navigation */}
+        <Box flex="1" overflowY="auto" p={4}>
           <SidebarItems />
+        </Box>
+
+        {/* Bottom Status */}
+        <Box p={4} borderTopWidth="1px">
+          <Flex fontSize="xs" color="gray.500" gap={2}>
+            <Text>Hyderabad</Text>
+            <Text>·</Text>
+            <Flex alignItems="center" gap={1}>
+              <Box w={2} h={2} borderRadius="full" bg="green.500" />
+              <Text>Live</Text>
+            </Flex>
+          </Flex>
         </Box>
       </Box>
     </>
