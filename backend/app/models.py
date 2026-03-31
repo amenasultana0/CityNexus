@@ -111,3 +111,92 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=40)
+
+
+# ─────────────────────────────────────────────────────────────
+# CityNexus Models — DO NOT modify models above this line
+# ─────────────────────────────────────────────────────────────
+
+from datetime import datetime, timezone  # noqa: E402
+
+
+class TransportStop(SQLModel, table=True):
+    """Metro, MMTS, and bus stops across Hyderabad."""
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str = Field(max_length=255)
+    latitude: float
+    longitude: float
+    stop_type: str = Field(max_length=20)   # metro | bus | mmts
+    zone_name: str | None = Field(default=None, max_length=100)
+
+
+class AreaContext(SQLModel, table=True):
+    """GIS features for the 15 operational Hyderabad zones."""
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    zone_name: str = Field(unique=True, index=True, max_length=100)
+    latitude: float
+    longitude: float
+    metro_count_1km: int = 0
+    bus_stop_count_1km: int = 0
+    traffic_chokepoint_nearby: bool = False
+    commercial_density_1km: int = 0
+    is_flood_prone: bool = False
+    nearest_metro_distance_km: float = 0.0
+    risk_level: str = Field(default="medium", max_length=20)  # medium | high
+
+
+class DemandPattern(SQLModel, table=True):
+    """Hourly demand and cancellation patterns per Hyderabad constituency."""
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    constituency_num: str = Field(index=True, max_length=20)
+    hour_of_day: int       # 0–23
+    day_of_week: int       # 0=Mon … 6=Sun
+    cancel_rate: float
+    booking_count: int = 0
+    driver_supply: int = 0
+
+
+class HyderabadZone(SQLModel, table=True):
+    """Constituency-level calibration data from Hyderabad funnel."""
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    ac_number: str = Field(unique=True, index=True, max_length=20)
+    base_cancel_rate: float
+    risk_level: str = Field(default="medium", max_length=20)  # medium | high
+    search_to_estimate_rate: float = 0.97
+    estimate_to_quote_rate: float = 0.35
+    quote_to_booking_rate: float = 0.99
+    conversion_rate: float = 0.04
+    avg_fare_inr: float = 180.0
+    avg_distance_km: float = 9.5
+
+
+class RidePrediction(SQLModel, table=True):
+    """Persisted record of each cancellation risk prediction."""
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID | None = Field(default=None, foreign_key="user.id")
+    origin_lat: float
+    origin_lon: float
+    dest_lat: float
+    dest_lon: float
+    predicted_risk: str = Field(max_length=20)   # medium | high
+    probability: float
+    is_raining: bool = False
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+class UserSearch(SQLModel, table=True):
+    """Log of user journey searches for analytics."""
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID | None = Field(default=None, foreign_key="user.id")
+    origin_name: str | None = Field(default=None, max_length=255)
+    dest_name: str | None = Field(default=None, max_length=255)
+    origin_lat: float
+    origin_lon: float
+    dest_lat: float
+    dest_lon: float
+    recommended_mode: str | None = Field(default=None, max_length=50)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )

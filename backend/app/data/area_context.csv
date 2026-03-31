@@ -1,0 +1,16 @@
+zone_name,latitude,longitude,metro_count_1km,bus_stop_count_1km,traffic_chokepoint_nearby,commercial_density_1km,is_flood_prone,nearest_metro_distance_km,risk_level
+HITEC City,17.4435,78.3772,0,43,True,64,False,5.98,medium
+Gachibowli,17.44,78.3487,0,22,True,2,False,7.41,medium
+Madhapur,17.4485,78.3908,0,25,False,19,False,4.67,medium
+Jubilee Hills,17.4239,78.4036,0,22,True,1,False,4.54,medium
+Secunderabad,17.4399,78.4983,2,114,True,4,True,0.75,high
+Ameerpet,17.4374,78.4482,3,91,True,40,False,0.55,high
+Kukatpally,17.4849,78.4138,1,31,False,2,False,0.28,medium
+Banjara Hills,17.4126,78.4502,0,50,True,4,True,2.23,high
+Old City,17.3616,78.4747,0,73,True,2,False,5.56,high
+Kondapur,17.4651,78.3646,0,35,True,18,False,4.24,medium
+Begumpet,17.438,78.4676,1,29,True,0,True,0.81,high
+Miyapur,17.4967,78.3583,0,43,True,0,True,1.72,medium
+Uppal,17.4065,78.5591,3,47,False,0,True,0.52,medium
+LB Nagar,17.352,78.553,0,64,False,0,False,5.12,medium
+Financial District,17.4281,78.3389,0,25,False,12,False,9.03,medium

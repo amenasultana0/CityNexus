@@ -1,3 +1,4 @@
+from sqlalchemy import event
 from sqlmodel import Session, create_engine, select
 
 from app import crud
@@ -5,6 +6,14 @@ from app.core.config import settings
 from app.models import User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+
+
+@event.listens_for(engine, "connect")
+def _disable_prepared_statements(dbapi_conn, _connection_record):
+    """Disable psycopg3 server-side prepared statements.
+    Required for Supabase / PgBouncer in transaction-pooling mode.
+    """
+    dbapi_conn.prepare_threshold = None
 
 
 # make sure all SQLModel models are imported (app.models) before initializing DB
