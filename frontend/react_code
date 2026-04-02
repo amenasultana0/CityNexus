@@ -1,0 +1,314 @@
+import { useState } from "react";
+
+const weatherIcons = { rain: "🌧️", sun: "☀️", cloud: "⛅" };
+
+const rideOptions = [
+  {
+    id: "cab",
+    name: "Cab",
+    icon: "🚖",
+    eta: "18 min",
+    cost: "₹210",
+    risk: "Medium",
+    extra: "Surge: 1.3x",
+    recommended: false,
+  },
+  {
+    id: "metro",
+    name: "Metro",
+    icon: "🚇",
+    eta: "25 min",
+    cost: "₹40",
+    risk: "Low",
+    extra: "Reliability: 9/10",
+    recommended: true,
+  },
+  {
+    id: "bus",
+    name: "Bus",
+    icon: "🚌",
+    eta: "32 min",
+    cost: "₹20",
+    risk: "Low",
+    extra: "Crowd: Medium",
+    recommended: false,
+  },
+];
+
+export default function CityNexus() {
+  const [pickup, setPickup] = useState("");
+  const [destination, setDestination] = useState("");
+  const [passengers, setPassengers] = useState("1");
+  const [time, setTime] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = () => {
+    if (pickup && destination) setSubmitted(true);
+  };
+
+  return (
+    <div style={styles.root}>
+      {/* Header */}
+      <header style={styles.header}>
+        <div style={styles.logo}>
+          <span style={styles.logoIcon}>🗺️</span>
+          <span style={styles.logoText}>CityNexus</span>
+        </div>
+        <nav style={styles.nav}>
+          {["Home", "Plan Ride", "Commute Planner"].map((item) => (
+            <a key={item} href="#" style={styles.navLink}>
+              {item}
+            </a>
+          ))}
+        </nav>
+      </header>
+
+      {/* Body */}
+      <div style={styles.body}>
+        {/* Sidebar */}
+        <aside style={styles.sidebar}>
+          <h2 style={styles.sidebarTitle}>Plan Your Ride</h2>
+
+          <label style={styles.label}>Pickup Location</label>
+          <input
+            style={styles.input}
+            type="text"
+            placeholder="Enter pickup"
+            value={pickup}
+            onChange={(e) => setPickup(e.target.value)}
+          />
+
+          <label style={styles.label}>Destination</label>
+          <input
+            style={styles.input}
+            type="text"
+            placeholder="Enter destination"
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+          />
+
+          <label style={styles.label}>Passengers</label>
+          <select
+            style={styles.input}
+            value={passengers}
+            onChange={(e) => setPassengers(e.target.value)}
+          >
+            {["1", "2", "3", "4+"].map((n) => (
+              <option key={n}>{n}</option>
+            ))}
+          </select>
+
+          <label style={styles.label}>Departure Time</label>
+          <input
+            style={styles.input}
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+          />
+
+          <button style={styles.btn} onClick={handleSubmit}>
+            🤖 Get AI Recommendation
+          </button>
+
+          {!pickup && !destination && (
+            <p style={styles.hint}>Fill in pickup & destination to continue.</p>
+          )}
+        </aside>
+
+        {/* Main */}
+        <main style={styles.main}>
+          {/* Map Area */}
+          <div style={styles.mapArea}>
+            <div style={styles.mapOverlay}>
+              <span style={styles.mapIcon}>🗺️</span>
+              <p style={styles.mapText}>Map Area (Google Maps API)</p>
+            </div>
+
+            {/* Weather Widget */}
+            <div style={styles.weatherWidget}>
+              <div style={styles.weatherTitle}>
+                {weatherIcons.rain} Weather Impact
+              </div>
+              <div style={styles.weatherDesc}>Light Rain Expected</div>
+              <div style={styles.weatherWarning}>⚠️ Cancellation Risk ↑</div>
+            </div>
+          </div>
+
+          {/* Ride Cards */}
+          <div style={styles.cardsArea}>
+            {submitted ? (
+              rideOptions.map((ride) => (
+                <div
+                  key={ride.id}
+                  style={{
+                    ...styles.card,
+                    ...(ride.recommended ? styles.cardRecommended : {}),
+                  }}
+                >
+                  {ride.recommended && (
+                    <div style={styles.badge}>⭐ Recommended</div>
+                  )}
+                  <div style={styles.cardIcon}>{ride.icon}</div>
+                  <h3 style={styles.cardTitle}>{ride.name}</h3>
+                  <div style={styles.cardRow}>
+                    <span style={styles.cardTag}>⏱ {ride.eta}</span>
+                    <span style={styles.cardTag}>💰 {ride.cost}</span>
+                  </div>
+                  <div style={styles.cardRow}>
+                    <span style={styles.cardTag}>
+                      🎯 Risk: {ride.risk}
+                    </span>
+                    <span style={styles.cardTag}>{ride.extra}</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={styles.placeholder}>
+                <span style={styles.placeholderIcon}>🚦</span>
+                <p>Enter your route details and click <b>Get AI Recommendation</b></p>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  root: {
+    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    margin: 0,
+    background: "#f5f1e8",
+    minHeight: "100vh",
+    display: "flex",
+    flexDirection: "column",
+  },
+  header: {
+    background: "#1f4d3a",
+    color: "white",
+    padding: "15px 30px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  logo: { display: "flex", alignItems: "center", gap: 10 },
+  logoIcon: { fontSize: 24 },
+  logoText: { fontSize: 22, fontWeight: "bold", letterSpacing: 1 },
+  nav: { display: "flex", gap: 20 },
+  navLink: { color: "white", textDecoration: "none", fontSize: 14 },
+  body: { display: "flex", flex: 1 },
+  sidebar: {
+    width: 280,
+    minWidth: 240,
+    background: "white",
+    padding: 25,
+    boxShadow: "2px 0 6px rgba(0,0,0,0.1)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  sidebarTitle: { margin: "0 0 12px", color: "#1f4d3a", fontSize: 20 },
+  label: { fontSize: 13, fontWeight: 600, color: "#444", marginTop: 10 },
+  input: {
+    width: "100%",
+    padding: "9px 10px",
+    marginTop: 5,
+    borderRadius: 6,
+    border: "1px solid #ccc",
+    fontSize: 14,
+    boxSizing: "border-box",
+    outline: "none",
+  },
+  btn: {
+    background: "#1f4d3a",
+    color: "white",
+    border: "none",
+    padding: "12px 10px",
+    borderRadius: 8,
+    marginTop: 18,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 15,
+    letterSpacing: 0.5,
+  },
+  hint: { color: "#999", fontSize: 12, marginTop: 8, textAlign: "center" },
+  main: { flex: 1, display: "flex", flexDirection: "column", position: "relative" },
+  mapArea: {
+    flex: "0 0 55%",
+    background: "linear-gradient(135deg, #d9e6df 0%, #b5cfc4 100%)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  mapOverlay: { textAlign: "center" },
+  mapIcon: { fontSize: 48 },
+  mapText: { color: "#3a6651", fontWeight: 600, fontSize: 18, margin: "8px 0 0" },
+  weatherWidget: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    background: "white",
+    padding: "14px 18px",
+    borderRadius: 12,
+    boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+    minWidth: 170,
+  },
+  weatherTitle: { fontWeight: 700, fontSize: 14, marginBottom: 6 },
+  weatherDesc: { fontSize: 13, color: "#555" },
+  weatherWarning: { fontSize: 12, color: "#c0392b", marginTop: 6, fontWeight: 600 },
+  cardsArea: {
+    display: "flex",
+    gap: 16,
+    padding: "20px 24px",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+  },
+  card: {
+    background: "white",
+    padding: "18px 16px",
+    borderRadius: 14,
+    flex: "1 1 160px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.09)",
+    position: "relative",
+    transition: "transform 0.15s",
+    cursor: "default",
+  },
+  cardRecommended: {
+    border: "3px solid #1f4d3a",
+    background: "#f0faf5",
+  },
+  badge: {
+    position: "absolute",
+    top: -12,
+    left: 12,
+    background: "#1f4d3a",
+    color: "white",
+    fontSize: 11,
+    fontWeight: 700,
+    padding: "3px 10px",
+    borderRadius: 20,
+  },
+  cardIcon: { fontSize: 28, marginBottom: 6 },
+  cardTitle: { margin: "0 0 10px", fontSize: 17, color: "#1f4d3a" },
+  cardRow: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 },
+  cardTag: {
+    background: "#f0f0f0",
+    borderRadius: 6,
+    padding: "3px 8px",
+    fontSize: 12,
+    color: "#555",
+  },
+  placeholder: {
+    textAlign: "center",
+    color: "#999",
+    padding: "30px 20px",
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 10,
+  },
+  placeholderIcon: { fontSize: 40 },
+};
