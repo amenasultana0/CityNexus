@@ -1,0 +1,28 @@
+{
+  "peak_hours": [
+    8,
+    9,
+    10,
+    16,
+    17,
+    18
+  ],
+  "off_peak_hours": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "high_demand_days": [
+    "Sunday",
+    "Friday",
+    "Saturday"
+  ],
+  "low_demand_days": [
+    "Monday",
+    "Wednesday",
+    "Thursday"
+  ]
+}
