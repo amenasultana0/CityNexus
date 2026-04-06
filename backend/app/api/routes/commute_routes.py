@@ -27,7 +27,7 @@ class WeeklyPlanRequest(BaseModel):
     origin_lon: float
     dest_lat: float
     dest_lon: float
-    passengers: int = Field(default=1, ge=1, le=6)
+    passengers: int = Field(default=1, ge=1, le=12)
     departure_time: str = Field(..., description="HH:MM — daily departure time")
 
 

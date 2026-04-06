@@ -24,6 +24,7 @@ class CostResult:
     final_cost_inr: float
     time_min: int
     available: bool           # False when passenger count disqualifies the mode
+    vehicles_needed: int = 1  # >1 when passengers exceed single-vehicle capacity
 
 
 # ── Haversine ────────────────────────────────────────────────
@@ -111,10 +112,12 @@ def _travel_time_min(mode: str, distance_km: float, hour: int) -> int:
 # ── Per-mode cost builders ────────────────────────────────────
 
 def _cab_mini_cost(
-    distance_km: float, hour: int, is_raining: bool, day_of_week: int
+    distance_km: float, hour: int, is_raining: bool, day_of_week: int, passengers: int = 1
 ) -> CostResult:
-    """Ola Mini / Uber Go — ₹80 for first 4 km, ₹15/km after."""
-    base = 80.0 + max(0.0, distance_km - 4.0) * 15.0
+    """Ola Mini / Uber Go — ₹80 for first 4 km, ₹15/km after. Max 4 passengers per vehicle."""
+    CAP = 4
+    vehicles = -(-passengers // CAP)  # ceiling division
+    base = (80.0 + max(0.0, distance_km - 4.0) * 15.0) * vehicles
     surge = cab_surge(hour, is_raining, day_of_week)
     return CostResult(
         mode="cab", variant="mini",
@@ -123,14 +126,17 @@ def _cab_mini_cost(
         final_cost_inr=round(base * surge, 2),
         time_min=_travel_time_min("cab_mini", distance_km, hour),
         available=True,
+        vehicles_needed=vehicles,
     )
 
 
 def _cab_sedan_cost(
-    distance_km: float, hour: int, is_raining: bool, day_of_week: int
+    distance_km: float, hour: int, is_raining: bool, day_of_week: int, passengers: int = 1
 ) -> CostResult:
-    """Ola Prime / Uber Premier — ₹100 for first 5 km, ₹18/km after."""
-    base = 100.0 + max(0.0, distance_km - 5.0) * 18.0
+    """Ola Prime / Uber Premier — ₹100 for first 5 km, ₹18/km after. Max 4 passengers per vehicle."""
+    CAP = 4
+    vehicles = -(-passengers // CAP)  # ceiling division
+    base = (100.0 + max(0.0, distance_km - 5.0) * 18.0) * vehicles
     surge = cab_surge(hour, is_raining, day_of_week)
     return CostResult(
         mode="cab", variant="sedan",
@@ -139,6 +145,7 @@ def _cab_sedan_cost(
         final_cost_inr=round(base * surge, 2),
         time_min=_travel_time_min("cab_sedan", distance_km, hour),
         available=True,
+        vehicles_needed=vehicles,
     )
 
 
@@ -171,6 +178,25 @@ def _bike_cost(
         final_cost_inr=round(base * surge, 2),
         time_min=_travel_time_min("bike", distance_km, hour),
         available=passengers == 1,
+    )
+
+
+def _cab_suv_cost(
+    distance_km: float, hour: int, is_raining: bool, day_of_week: int, passengers: int = 1
+) -> CostResult:
+    """Ola SUV / Uber XL — ₹130 for first 5 km, ₹22/km after. Max 7 passengers per vehicle."""
+    CAP = 7
+    vehicles = -(-passengers // CAP)  # ceiling division
+    base = (130.0 + max(0.0, distance_km - 5.0) * 22.0) * vehicles
+    surge = cab_surge(hour, is_raining, day_of_week)
+    return CostResult(
+        mode="cab", variant="suv",
+        base_cost_inr=round(base, 2),
+        surge_multiplier=surge,
+        final_cost_inr=round(base * surge, 2),
+        time_min=_travel_time_min("cab_sedan", distance_km, hour),
+        available=True,
+        vehicles_needed=vehicles,
     )
 
 
@@ -230,8 +256,9 @@ def calculate_all_costs(
     return [
         _bike_cost(distance_km, hour, is_raining, day_of_week, passengers),
         _auto_cost(distance_km, hour, is_raining, day_of_week, passengers),
-        _cab_mini_cost(distance_km, hour, is_raining, day_of_week),
-        _cab_sedan_cost(distance_km, hour, is_raining, day_of_week),
+        _cab_mini_cost(distance_km, hour, is_raining, day_of_week, passengers),
+        _cab_sedan_cost(distance_km, hour, is_raining, day_of_week, passengers),
+        _cab_suv_cost(distance_km, hour, is_raining, day_of_week, passengers),
         _metro_cost(distance_km, hour),
         _bus_cost(distance_km, hour),
     ]

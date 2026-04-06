@@ -152,6 +152,7 @@ def predict_cancellation(body: PredictRequest, session: SessionDep) -> Any:
     )
 
     area = _nearest_area(session, body.origin_lat, body.origin_lon)
+    distance_km = _haversine_km(body.origin_lat, body.origin_lon, body.dest_lat, body.dest_lon)
 
     features = RideFeatures(
         hour=body.hour,
@@ -164,6 +165,7 @@ def predict_cancellation(body: PredictRequest, session: SessionDep) -> Any:
         commercial_density_1km=area.commercial_density_1km if area else 0,
         nearest_metro_distance_km=area.nearest_metro_distance_km if area else 5.0,
         historical_cancel_rate=demand_info.cancel_rate,
+        distance_km=distance_km,
     )
 
     if body.user_id is not None and not session.get(User, body.user_id):

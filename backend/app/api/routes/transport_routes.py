@@ -31,6 +31,7 @@ class TransportOption(BaseModel):
     reliability_score: int      # 1–10
     available: bool
     reason: str
+    vehicles_needed: int = 1
 
 
 class AlternativesResponse(BaseModel):
@@ -77,6 +78,13 @@ def _reason(mode: str, option: Any, risk_level: str) -> str:
         return "Not available for selected passenger count"
     if mode in {"metro", "bus"}:
         return "Fixed schedule — unaffected by traffic or surge"
+    if option.vehicles_needed > 1:
+        suffix = f"{option.vehicles_needed} vehicles needed"
+        if risk_level == "high":
+            return f"High cancellation risk · {suffix}"
+        if option.surge_multiplier > 1.0:
+            return f"Surge pricing active ({option.surge_multiplier}x) · {suffix}"
+        return suffix
     if risk_level == "high":
         return "High cancellation risk — consider metro/bus"
     if option.surge_multiplier > 1.0:
@@ -93,7 +101,7 @@ def transport_alternatives(
     origin_lon: float = Query(...),
     dest_lat: float = Query(...),
     dest_lon: float = Query(...),
-    passengers: int = Query(default=1, ge=1, le=6),
+    passengers: int = Query(default=1, ge=1, le=12),
     hour: int = Query(..., ge=0, le=23),
     day_of_week: int = Query(..., ge=0, le=6),
     is_raining: bool = Query(default=False),
@@ -112,19 +120,39 @@ def transport_alternatives(
         distance_km, hour, is_raining, day_of_week, passengers
     )
 
+    metro_nearby = transport_svc.find_nearest_stops(
+        session, origin_lat, origin_lon, stop_type="metro", radius_km=1.0, max_count=1
+    )
+    metro_accessible = len(metro_nearby) > 0
+
     options: list[TransportOption] = []
     for c in all_costs:
-        options.append(TransportOption(
-            mode=c.mode,
-            variant=c.variant,
-            time_min=c.time_min,
-            cost_inr=c.final_cost_inr,
-            surge_multiplier=c.surge_multiplier,
-            risk_level=demand_info.risk_level if c.mode not in {"metro", "bus"} else "low",
-            reliability_score=10 if c.mode in {"metro", "bus"} else rel_score,
-            available=c.available,
-            reason=_reason(c.mode, c, demand_info.risk_level),
-        ))
+        if c.mode == "metro" and not metro_accessible:
+            options.append(TransportOption(
+                mode=c.mode,
+                variant=c.variant,
+                time_min=c.time_min,
+                cost_inr=c.final_cost_inr,
+                surge_multiplier=c.surge_multiplier,
+                risk_level="low",
+                reliability_score=10,
+                available=False,
+                reason="No metro station within 1 km",
+                vehicles_needed=c.vehicles_needed,
+            ))
+        else:
+            options.append(TransportOption(
+                mode=c.mode,
+                variant=c.variant,
+                time_min=c.time_min,
+                cost_inr=c.final_cost_inr,
+                surge_multiplier=c.surge_multiplier,
+                risk_level=demand_info.risk_level if c.mode not in {"metro", "bus"} else "low",
+                reliability_score=10 if c.mode in {"metro", "bus"} else rel_score,
+                available=c.available,
+                reason=_reason(c.mode, c, demand_info.risk_level),
+                vehicles_needed=c.vehicles_needed,
+            ))
 
     return AlternativesResponse(distance_km=round(distance_km, 2), options=options)
 

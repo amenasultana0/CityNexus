@@ -18,6 +18,9 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutItemsRouteImport } from './routes/_layout/items'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
+import { Route as LayoutHeatmapRouteImport } from './routes/_layout/heatmap'
+import { Route as LayoutWeeklyRouteImport } from './routes/_layout/weekly'
+import { Route as LayoutInsightsRouteImport } from './routes/_layout/insights'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -63,6 +66,21 @@ const LayoutAdminRoute = LayoutAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutHeatmapRoute = LayoutHeatmapRouteImport.update({
+  id: '/heatmap',
+  path: '/heatmap',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutWeeklyRoute = LayoutWeeklyRouteImport.update({
+  id: '/weekly',
+  path: '/weekly',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutInsightsRoute = LayoutInsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
@@ -72,6 +90,9 @@ export interface FileRoutesByFullPath {
   '/admin': typeof LayoutAdminRoute
   '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
+  '/heatmap': typeof LayoutHeatmapRoute
+  '/weekly': typeof LayoutWeeklyRoute
+  '/insights': typeof LayoutInsightsRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesByTo {
@@ -82,6 +103,9 @@ export interface FileRoutesByTo {
   '/admin': typeof LayoutAdminRoute
   '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
+  '/heatmap': typeof LayoutHeatmapRoute
+  '/weekly': typeof LayoutWeeklyRoute
+  '/insights': typeof LayoutInsightsRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesById {
@@ -94,6 +118,9 @@ export interface FileRoutesById {
   '/_layout/admin': typeof LayoutAdminRoute
   '/_layout/items': typeof LayoutItemsRoute
   '/_layout/settings': typeof LayoutSettingsRoute
+  '/_layout/heatmap': typeof LayoutHeatmapRoute
+  '/_layout/weekly': typeof LayoutWeeklyRoute
+  '/_layout/insights': typeof LayoutInsightsRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
@@ -106,6 +133,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/items'
     | '/settings'
+    | '/heatmap'
+    | '/weekly'
+    | '/insights'
     | '/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -116,6 +146,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/items'
     | '/settings'
+    | '/heatmap'
+    | '/weekly'
+    | '/insights'
     | '/'
   id:
     | '__root__'
@@ -127,6 +160,9 @@ export interface FileRouteTypes {
     | '/_layout/admin'
     | '/_layout/items'
     | '/_layout/settings'
+    | '/_layout/heatmap'
+    | '/_layout/weekly'
+    | '/_layout/insights'
     | '/_layout/'
   fileRoutesById: FileRoutesById
 }
@@ -203,6 +239,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/heatmap': {
+      id: '/_layout/heatmap'
+      path: '/heatmap'
+      fullPath: '/heatmap'
+      preLoaderRoute: typeof LayoutHeatmapRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/weekly': {
+      id: '/_layout/weekly'
+      path: '/weekly'
+      fullPath: '/weekly'
+      preLoaderRoute: typeof LayoutWeeklyRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/insights': {
+      id: '/_layout/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof LayoutInsightsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
@@ -210,6 +267,9 @@ interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
   LayoutItemsRoute: typeof LayoutItemsRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
+  LayoutHeatmapRoute: typeof LayoutHeatmapRoute
+  LayoutWeeklyRoute: typeof LayoutWeeklyRoute
+  LayoutInsightsRoute: typeof LayoutInsightsRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
@@ -217,6 +277,9 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
   LayoutItemsRoute: LayoutItemsRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
+  LayoutHeatmapRoute: LayoutHeatmapRoute,
+  LayoutWeeklyRoute: LayoutWeeklyRoute,
+  LayoutInsightsRoute: LayoutInsightsRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }
 
