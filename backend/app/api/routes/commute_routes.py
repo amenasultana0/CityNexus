@@ -23,12 +23,13 @@ _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 # ── Request / Response models ─────────────────────────────────
 
 class WeeklyPlanRequest(BaseModel):
-    origin_lat: float
-    origin_lon: float
-    dest_lat: float
-    dest_lon: float
-    passengers: int = Field(default=1, ge=1, le=12)
+    origin_lat: float = Field(ge=17.0, le=18.0)
+    origin_lon: float = Field(ge=78.0, le=79.0)
+    dest_lat: float = Field(ge=17.0, le=18.0)
+    dest_lon: float = Field(ge=78.0, le=79.0)
+    passengers: int = Field(default=1, ge=1, le=6)
     departure_time: str = Field(..., description="HH:MM — daily departure time")
+    round_trip: bool = Field(default=False)
 
 
 class DayPlan(BaseModel):
@@ -119,12 +120,13 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
         best = _pick_best_mode(all_costs, demand_info.risk_level)
         mode_label = _mode_label(best.mode, best.variant)
 
+        day_cost = best.final_cost_inr * (2 if body.round_trip else 1)
         plan.append(DayPlan(
             date=day.isoformat(),
             day_name=_DAY_NAMES[dow],
             recommended_mode=mode_label,
             variant=best.variant,
-            cost_inr=best.final_cost_inr,
+            cost_inr=day_cost,
             surge_multiplier=best.surge_multiplier,
             time_min=best.time_min,
             risk_level=demand_info.risk_level,

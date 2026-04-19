@@ -57,6 +57,17 @@ function getRiskBg(level: string) {
   return "#e53e3e"
 }
 
+// Hyderabad bounding box
+const HYD_LAT_MIN = 17.1, HYD_LAT_MAX = 17.8
+const HYD_LON_MIN = 78.1, HYD_LON_MAX = 78.8
+
+function formatDate(dateStr: string): string {
+  // dateStr is "YYYY-MM-DD"; parse without timezone shift
+  const [, m, d] = dateStr.split("-").map(Number)
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+  return `${months[m - 1]} ${d}`
+}
+
 function WeeklyPage() {
   const [pickupText, setPickupText] = useState("")
   const [destText, setDestText] = useState("")
@@ -65,6 +76,9 @@ function WeeklyPage() {
   const [planRequest, setPlanRequest] = useState<WeeklyPlanRequest | null>(null)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [geoError, setGeoError] = useState("")
+  const [pickupDisplay, setPickupDisplay] = useState("")
+  const [destDisplay, setDestDisplay] = useState("")
+  const [roundTrip, setRoundTrip] = useState(true)
 
   const handleSubmit = async () => {
     if (!pickupText || !destText) return
@@ -75,6 +89,23 @@ function WeeklyPage() {
         geocode(pickupText),
         geocode(destText),
       ])
+
+      // Hyderabad boundary check
+      for (const [loc, name] of [[pickup, "Pickup"], [dest, "Destination"]] as const) {
+        if (loc.lat < HYD_LAT_MIN || loc.lat > HYD_LAT_MAX || loc.lon < HYD_LON_MIN || loc.lon > HYD_LON_MAX) {
+          setGeoError(`${name} is outside Hyderabad — please enter a location within the city`)
+          return
+        }
+      }
+
+      // Same-location check
+      if (Math.abs(pickup.lat - dest.lat) < 0.001 && Math.abs(pickup.lon - dest.lon) < 0.001) {
+        setGeoError("Pickup and destination are the same location")
+        return
+      }
+
+      setPickupDisplay(pickup.displayName)
+      setDestDisplay(dest.displayName)
       setPlanRequest({
         origin_lat: pickup.lat,
         origin_lon: pickup.lon,
@@ -82,6 +113,7 @@ function WeeklyPage() {
         dest_lon: dest.lon,
         passengers,
         departure_time: departureTime,
+        round_trip: roundTrip,
       })
     } catch (e: unknown) {
       setGeoError(
@@ -115,7 +147,7 @@ function WeeklyPage() {
     })[0]
 
   const chartData = plan?.weekly_plan.map((d) => ({
-    day: d.day_name.slice(0, 3),
+    day: `${d.day_name.slice(0, 3)} ${formatDate(d.date)}`,
     cost: Math.round(d.cost_inr),
     isCheapest: d === cheapestDay,
   }))
@@ -143,17 +175,27 @@ function WeeklyPage() {
               <Input
                 placeholder="e.g. Ameerpet"
                 value={pickupText}
-                onChange={(e) => setPickupText(e.target.value)}
+                onChange={(e) => { setPickupText(e.target.value); setPickupDisplay("") }}
                 bg="bg"
               />
+              {pickupDisplay && (
+                <Text fontSize="xs" color="gray.400" mt={1} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                  {pickupDisplay}
+                </Text>
+              )}
             </Field>
             <Field label="DESTINATION">
               <Input
                 placeholder="e.g. Gachibowli"
                 value={destText}
-                onChange={(e) => setDestText(e.target.value)}
+                onChange={(e) => { setDestText(e.target.value); setDestDisplay("") }}
                 bg="bg"
               />
+              {destDisplay && (
+                <Text fontSize="xs" color="gray.400" mt={1} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                  {destDisplay}
+                </Text>
+              )}
             </Field>
             <Field label="PAX">
               <Input
@@ -161,7 +203,7 @@ function WeeklyPage() {
                 min={1}
                 max={6}
                 value={passengers}
-                onChange={(e) => setPassengers(Number(e.target.value))}
+                onChange={(e) => setPassengers(Math.min(6, Math.max(1, Number(e.target.value))))}
                 bg="bg"
               />
             </Field>
@@ -182,6 +224,17 @@ function WeeklyPage() {
               Plan My Week
             </Button>
           </Grid>
+          <Flex align="center" gap={2} mt={2}>
+            <input
+              type="checkbox"
+              id="roundtrip-weekly"
+              checked={roundTrip}
+              onChange={(e) => setRoundTrip(e.target.checked)}
+            />
+            <label htmlFor="roundtrip-weekly" style={{ fontSize: "0.875rem", cursor: "pointer" }}>
+              Round trip — costs include return journey (×2)
+            </label>
+          </Flex>
           {geoError && (
             <Text color="red.400" mt={2} fontSize="sm">
               {geoError}
@@ -241,6 +294,9 @@ function WeeklyPage() {
                 <Text fontSize="2xl" fontWeight="bold" color="blue.400">
                   ₹{Math.round(plan.total_estimated_cost_inr)}
                 </Text>
+                <Text fontSize="xs" color="gray.400">
+                  {roundTrip ? "round trip included" : "one-way only"}
+                </Text>
               </Box>
               <Box bg="bg.subtle" borderRadius="xl" p={4} borderWidth="1px">
                 <Text fontSize="xs" color="gray.500" fontWeight="bold" mb={1}>
@@ -252,6 +308,11 @@ function WeeklyPage() {
                     ₹{cheapestDay ? Math.round(cheapestDay.cost_inr) : "-"}
                   </Text>
                 </Flex>
+                {cheapestDay && (
+                  <Text fontSize="xs" color="gray.400" mt={1}>
+                    {formatDate(cheapestDay.date)}
+                  </Text>
+                )}
               </Box>
               <Box bg="bg.subtle" borderRadius="xl" p={4} borderWidth="1px">
                 <Text fontSize="xs" color="gray.500" fontWeight="bold" mb={1}>
@@ -269,6 +330,11 @@ function WeeklyPage() {
                     {riskiestDay?.risk_level}
                   </Text>
                 </Flex>
+                {riskiestDay && (
+                  <Text fontSize="xs" color="gray.400" mt={1}>
+                    {formatDate(riskiestDay.date)}
+                  </Text>
+                )}
               </Box>
             </Grid>
 
@@ -317,7 +383,7 @@ function WeeklyPage() {
                       </Text>
                     </Flex>
                     <Text fontSize="sm" color="gray.500">
-                      {day.date}
+                      {formatDate(day.date)}
                     </Text>
                     <Box>
                       <Text
@@ -362,7 +428,10 @@ function WeeklyPage() {
                 >
                   <XAxis
                     dataKey="day"
-                    tick={{ fill: "#888", fontSize: 12 }}
+                    tick={{ fill: "#888", fontSize: 10 }}
+                    angle={-25}
+                    textAnchor="end"
+                    height={45}
                   />
                   <YAxis
                     tick={{ fill: "#888", fontSize: 12 }}
@@ -402,7 +471,10 @@ function WeeklyPage() {
                     <Text fontSize="xs" color="white" fontWeight="bold">
                       {day.day_name.slice(0, 3)}
                     </Text>
-                    <Text fontSize="xs" color="white" textTransform="capitalize">
+                    <Text fontSize="xs" color="white" opacity={0.9}>
+                      {formatDate(day.date)}
+                    </Text>
+                    <Text fontSize="xs" color="white" textTransform="capitalize" opacity={0.85}>
                       {day.risk_level}
                     </Text>
                   </Box>

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Badge,
@@ -97,6 +97,10 @@ function WeatherIcon({ data }: { data: WeatherImpactResponse }) {
   return <Text fontSize="3xl">☀️</Text>
 }
 
+// Hyderabad bounding box
+const HYD_LAT_MIN = 17.1, HYD_LAT_MAX = 17.8
+const HYD_LON_MIN = 78.1, HYD_LON_MAX = 78.8
+
 function Dashboard() {
   const [pickupText, setPickupText] = useState("")
   const [destText, setDestText] = useState("")
@@ -105,20 +109,54 @@ function Dashboard() {
   const [formData, setFormData] = useState<FormData | null>(null)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [geoError, setGeoError] = useState("")
+  const [pickupDisplay, setPickupDisplay] = useState("")
+  const [destDisplay, setDestDisplay] = useState("")
+  const [pastTimeWarning, setPastTimeWarning] = useState(false)
+  const [roundTrip, setRoundTrip] = useState(false)
+  const [preference, setPreference] = useState(0.5)
+  const [debouncedPref, setDebouncedPref] = useState(0.5)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPref(preference), 300)
+    return () => clearTimeout(t)
+  }, [preference])
 
   const handleSubmit = async () => {
     if (!pickupText || !destText) return
     setIsGeocoding(true)
     setGeoError("")
+    setPastTimeWarning(false)
     try {
       const [pickup, dest] = await Promise.all([
         geocode(pickupText),
         geocode(destText),
       ])
+
+      // Hyderabad boundary check
+      for (const [loc, name] of [[pickup, "Pickup"], [dest, "Destination"]] as const) {
+        if (loc.lat < HYD_LAT_MIN || loc.lat > HYD_LAT_MAX || loc.lon < HYD_LON_MIN || loc.lon > HYD_LON_MAX) {
+          setGeoError(`${name} is outside Hyderabad — please enter a location within the city`)
+          return
+        }
+      }
+
+      // Same-location check
+      if (Math.abs(pickup.lat - dest.lat) < 0.001 && Math.abs(pickup.lon - dest.lon) < 0.001) {
+        setGeoError("Pickup and destination are the same location")
+        return
+      }
+
       const h = parseInt(timeStr.split(":")[0], 10)
       const now = new Date()
+
+      // Past time warning (non-blocking)
+      const timePast = h < now.getHours() || (h === now.getHours() && parseInt(timeStr.split(":")[1], 10) < now.getMinutes())
+      setPastTimeWarning(timePast)
+
       const jsDay = now.getDay() // 0=Sun
       const dow = jsDay === 0 ? 6 : jsDay - 1 // Mon=0
+      setPickupDisplay(pickup.displayName)
+      setDestDisplay(dest.displayName)
       setFormData({
         originLat: pickup.lat,
         originLon: pickup.lon,
@@ -239,24 +277,22 @@ function Dashboard() {
     enabled: !!formData,
   })
 
-  // Best option = composite score: risk (35%) + cost (35%) + time (30%)
-  // Prevents bus always winning just because it's cheapest low-risk
-  const bestOption = (() => {
+  // Score each option by user preference: 0.0 = cheapest, 1.0 = fastest
+  const scoredOptions = (() => {
     const available = alternativesQuery.data?.options.filter((o) => o.available)
-    if (!available || available.length === 0) return undefined
-    const riskOrder: Record<string, number> = { low: 0, moderate: 1, high: 2 }
+    if (!available || available.length === 0) return []
     const maxCost = Math.max(...available.map((o) => o.cost_inr), 1)
     const maxTime = Math.max(...available.map((o) => o.time_min), 1)
-    return available.sort((a, b) => {
+    return [...available].sort((a, b) => {
       const score = (o: typeof a) => {
-        const r = (riskOrder[o.risk_level] ?? 1) / 2
-        const c = o.cost_inr / maxCost
-        const t = o.time_min / maxTime
-        return 0.35 * r + 0.35 * c + 0.30 * t
+        const costScore = o.cost_inr / maxCost
+        const timeScore = o.time_min / maxTime
+        return costScore * (1 - debouncedPref) + timeScore * debouncedPref
       }
       return score(a) - score(b)
-    })[0]
+    })
   })()
+  const bestOption = scoredOptions[0]
 
   const decisionPalette = bestOption
     ? getRiskColorPalette(bestOption.risk_level)
@@ -294,27 +330,37 @@ function Dashboard() {
               <Input
                 placeholder="e.g. Ameerpet"
                 value={pickupText}
-                onChange={(e) => setPickupText(e.target.value)}
+                onChange={(e) => { setPickupText(e.target.value); setPickupDisplay("") }}
                 bg="bg"
                 onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               />
+              {pickupDisplay && (
+                <Text fontSize="xs" color="gray.400" mt={1} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                  {pickupDisplay}
+                </Text>
+              )}
             </Field>
             <Field label="DESTINATION">
               <Input
                 placeholder="e.g. Gachibowli"
                 value={destText}
-                onChange={(e) => setDestText(e.target.value)}
+                onChange={(e) => { setDestText(e.target.value); setDestDisplay("") }}
                 bg="bg"
                 onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               />
+              {destDisplay && (
+                <Text fontSize="xs" color="gray.400" mt={1} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                  {destDisplay}
+                </Text>
+              )}
             </Field>
             <Field label="PAX">
               <Input
                 type="number"
                 min={1}
-                max={12}
+                max={6}
                 value={passengers}
-                onChange={(e) => setPassengers(Number(e.target.value))}
+                onChange={(e) => setPassengers(Math.min(6, Math.max(1, Number(e.target.value))))}
                 bg="bg"
               />
             </Field>
@@ -335,9 +381,27 @@ function Dashboard() {
               Analyse My Trip
             </Button>
           </Grid>
+          <Flex align="center" gap={4} mt={2} flexWrap="wrap">
+            <Flex align="center" gap={2}>
+              <input
+                type="checkbox"
+                id="roundtrip-dash"
+                checked={roundTrip}
+                onChange={(e) => setRoundTrip(e.target.checked)}
+              />
+              <label htmlFor="roundtrip-dash" style={{ fontSize: "0.875rem", cursor: "pointer" }}>
+                Round trip (costs × 2)
+              </label>
+            </Flex>
+          </Flex>
           {geoError && (
             <Text color="red.400" mt={2} fontSize="sm">
               {geoError}
+            </Text>
+          )}
+          {pastTimeWarning && (
+            <Text color="orange.400" mt={1} fontSize="xs">
+              This time has already passed today — showing current conditions
             </Text>
           )}
         </Box>
@@ -404,10 +468,10 @@ function Dashboard() {
                         fontWeight="bold"
                         color={`${decisionPalette}.500`}
                       >
-                        ₹{Math.round(bestOption.cost_inr)}
+                        ₹{Math.round(bestOption.cost_inr * (roundTrip ? 2 : 1))}
                       </Text>
                       <Text fontSize="xs" color="gray.500">
-                        Cost
+                        {roundTrip ? "Round trip" : "Cost"}
                       </Text>
                     </Box>
                     <Box>
@@ -645,9 +709,25 @@ function Dashboard() {
 
             {/* ── Transport Alternatives ── */}
             <Box bg="bg.subtle" borderRadius="xl" p={6} borderWidth="1px">
-              <Heading size="sm" color="gray.500" mb={4}>
-                TRANSPORT ALTERNATIVES
-              </Heading>
+              <Flex align="center" justify="space-between" mb={4} wrap="wrap" gap={3}>
+                <Heading size="sm" color="gray.500">TRANSPORT ALTERNATIVES</Heading>
+                <Box minW="220px" flex="1" maxW="340px">
+                  <Flex justify="space-between" fontSize="xs" color="gray.500" mb={1}>
+                    <Text>💰 Cheapest</Text>
+                    <Text fontWeight="bold" color="gray.300">
+                      {debouncedPref < 0.3 ? "Cost-focused" : debouncedPref > 0.7 ? "Speed-focused" : "Balanced"}
+                    </Text>
+                    <Text>⚡ Fastest</Text>
+                  </Flex>
+                  <input
+                    type="range"
+                    min={0} max={1} step={0.05}
+                    value={preference}
+                    onChange={(e) => setPreference(parseFloat(e.target.value))}
+                    style={{ width: "100%", accentColor: "#4299e1" }}
+                  />
+                </Box>
+              </Flex>
               {alternativesQuery.isLoading ? (
                 <VStack gap={3}>
                   <Skeleton h="64px" />
@@ -656,69 +736,106 @@ function Dashboard() {
                 </VStack>
               ) : alternativesQuery.data ? (
                 <VStack gap={3} align="stretch">
-                  {alternativesQuery.data.options
-                    .filter((o) => o.available)
-                    .map((opt, i) => {
-                      const isBest = opt === bestOption
+                  {(() => {
+                    const available = scoredOptions
+                    if (available.length === 0) return null
+                    const mostExpensive = [...available].sort((a, b) => b.cost_inr - a.cost_inr)[0]
+                    const slowest = [...available].sort((a, b) => b.time_min - a.time_min)[0]
+
+                    const getComparison = (opt: typeof available[0]) => {
+                      if (opt === mostExpensive) {
+                        const savedMin = slowest.time_min - opt.time_min
+                        if (savedMin >= 5) return `⚡ ${savedMin} mins faster than ${slowest.mode}`
+                        return null
+                      }
+                      const savedCost = (mostExpensive.cost_inr - opt.cost_inr) * (roundTrip ? 2 : 1)
+                      if (savedCost >= 10) return `💰 Saves ₹${Math.round(savedCost)} vs ${mostExpensive.mode}`
+                      return null
+                    }
+
+                    return available.map((opt, i) => {
+                      const isBest = i === 0
+                      const displayCost = roundTrip ? opt.cost_inr * 2 : opt.cost_inr
+                      const comparison = getComparison(opt)
+                      const bd = opt.time_breakdown
+
                       return (
                         <Box
-                          key={i}
+                          key={opt.mode + (opt.variant ?? "")}
                           bg="bg"
                           borderWidth={isBest ? "2px" : "1px"}
                           borderColor={isBest ? "green.500" : "border"}
                           borderRadius="lg"
                           p={4}
                         >
-                          <Flex align="center" gap={4}>
-                            <Text fontSize="2xl">
+                          <Flex align="start" gap={4}>
+                            <Text fontSize="2xl" mt={1}>
                               {modeEmoji(opt.mode, opt.variant)}
                             </Text>
                             <Box flex="1">
-                              <Flex
-                                align="center"
-                                gap={2}
-                                mb={1}
-                                flexWrap="wrap"
-                              >
-                                <Text fontWeight="bold" textTransform="capitalize">
+                              {/* Title row */}
+                              <Flex align="center" gap={2} mb={1} flexWrap="wrap">
+                                <Text fontWeight="bold" fontSize="md" textTransform="capitalize">
                                   {opt.vehicles_needed > 1 ? `${opt.vehicles_needed} × ` : ""}
-                                  {opt.mode}
-                                  {opt.variant ? ` · ${opt.variant}` : ""}
+                                  {opt.mode}{opt.variant ? ` (${opt.variant})` : ""}
                                 </Text>
-                                {isBest && (
-                                  <Badge colorPalette="green">Best</Badge>
-                                )}
+                                {isBest && <Badge colorPalette="green">Best for you</Badge>}
                                 {opt.vehicles_needed > 1 && (
-                                  <Badge colorPalette="orange" size="sm">
-                                    {opt.vehicles_needed} vehicles
-                                  </Badge>
+                                  <Badge colorPalette="orange" size="sm">{opt.vehicles_needed} vehicles</Badge>
                                 )}
-                                <Badge
-                                  colorPalette={
-                                    getRiskColorPalette(opt.risk_level) as any
-                                  }
-                                  variant="outline"
-                                  size="sm"
-                                >
+                                <Badge colorPalette={getRiskColorPalette(opt.risk_level) as any} variant="outline" size="sm">
                                   {opt.risk_level}
                                 </Badge>
                               </Flex>
-                              <Text fontSize="sm" color="gray.500">
-                                {opt.reason}
-                              </Text>
+
+                              {/* Time breakdown label */}
+                              {bd ? (
+                                <Text fontSize="sm" color="gray.400" mb={1}>{bd.label}</Text>
+                              ) : (
+                                <Text fontSize="sm" color="gray.400" mb={1}>{opt.time_min} mins</Text>
+                              )}
+
+                              {/* Frequency / walk / wait detail line */}
+                              {(bd?.frequency_label || opt.stop_details) && (
+                                <Text fontSize="xs" color="gray.500" mb={1}>
+                                  {[
+                                    bd?.frequency_label,
+                                    bd && bd.walk_min > 0 ? `${bd.walk_min} min walk` : null,
+                                    bd ? `${bd.wait_min} min wait` : null,
+                                  ].filter(Boolean).join(" · ")}
+                                </Text>
+                              )}
+
+                              {/* Stop details */}
+                              {opt.stop_details && (
+                                <Box fontSize="xs" color="gray.500" mb={1}>
+                                  <Text>🚉 Board: {opt.stop_details.board_at}</Text>
+                                  <Text>🚉 Alight: {opt.stop_details.alight_at}</Text>
+                                </Box>
+                              )}
+
+                              {/* Reason */}
+                              <Text fontSize="xs" color="gray.500">{opt.reason}</Text>
+
+                              {/* Comparison line */}
+                              {comparison && (
+                                <Text fontSize="xs" color="green.400" mt={1} fontWeight="medium">
+                                  {comparison}
+                                </Text>
+                              )}
                             </Box>
-                            <Box textAlign="right">
-                              <Text fontWeight="bold" fontSize="lg">
-                                ₹{Math.round(opt.cost_inr)}
-                              </Text>
-                              <Text fontSize="sm" color="gray.500">
-                                {opt.time_min} min · {opt.reliability_score}/10
-                              </Text>
+
+                            {/* Cost */}
+                            <Box textAlign="right" flexShrink={0}>
+                              <Text fontWeight="bold" fontSize="lg">₹{Math.round(displayCost)}</Text>
+                              {roundTrip && <Text fontSize="xs" color="gray.400">round trip</Text>}
+                              <Text fontSize="xs" color="gray.500">{opt.reliability_score}/10</Text>
                             </Box>
                           </Flex>
                         </Box>
                       )
-                    })}
+                    })
+                  })()}
                 </VStack>
               ) : null}
             </Box>
@@ -738,7 +855,7 @@ function Dashboard() {
                       .map((c) => ({
                         name:
                           c.mode + (c.variant ? ` (${c.variant})` : ""),
-                        cost: Math.round(c.final_cost_inr),
+                        cost: Math.round(c.final_cost_inr * (roundTrip ? 2 : 1)),
                         base: Math.round(c.base_cost_inr),
                       }))}
                     layout="vertical"

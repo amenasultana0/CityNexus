@@ -57,6 +57,20 @@ export interface BestTimeResponse {
   best_slot: TimeSlot | null
 }
 
+export interface StopDetails {
+  board_at: string
+  alight_at: string
+}
+
+export interface TimeBreakdown {
+  travel_min: number
+  wait_min: number
+  walk_min: number
+  total_min: number
+  label: string
+  frequency_label: string | null
+}
+
 export interface TransportOption {
   mode: string
   variant: string | null
@@ -68,6 +82,8 @@ export interface TransportOption {
   available: boolean
   reason: string
   vehicles_needed: number
+  stop_details: StopDetails | null
+  time_breakdown: TimeBreakdown | null
 }
 
 export interface AlternativesResponse {
@@ -81,6 +97,8 @@ export interface PickupSuggestion {
   distance_m: number
   walk_min: number
   risk_reduction_pct: number
+  lat: number
+  lon: number
 }
 
 export interface OptimalPickupResponse {
@@ -142,6 +160,7 @@ export interface WeeklyPlanRequest {
   dest_lon: number
   passengers: number
   departure_time: string
+  round_trip?: boolean
 }
 
 // ─── API Functions ────────────────────────────────────────────────────────────
@@ -229,7 +248,7 @@ export const getWeeklyPlan = async (
 
 export const geocode = async (
   locationName: string,
-): Promise<{ lat: number; lon: number }> => {
+): Promise<{ lat: number; lon: number; displayName: string }> => {
   const response = await axios.get(
     "https://nominatim.openstreetmap.org/search",
     {
@@ -242,8 +261,12 @@ export const geocode = async (
     },
   )
   if (!response.data || response.data.length === 0) {
-    throw new Error(`Could not find location: ${locationName}`)
+    throw new Error(`Location not found — try a more specific name`)
   }
   const result = response.data[0]
-  return { lat: parseFloat(result.lat), lon: parseFloat(result.lon) }
+  return {
+    lat: parseFloat(result.lat),
+    lon: parseFloat(result.lon),
+    displayName: result.display_name as string,
+  }
 }
