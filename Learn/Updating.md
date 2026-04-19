@@ -34,7 +34,7 @@
 
 ---
 
-### U2 — Complete Address [ ]
+### U2 — Complete Address [x]
 **Problem:** The geocoder accepts vague names like "Ameerpet" but never shows the full resolved address back to the user. User doesn't know what exact location was matched.
 
 **What's missing:**
@@ -59,7 +59,7 @@
 
 ---
 
-### U3 — Double Check [ ]
+### U3 — Double Check [x]
 **Problem:** There is no confirmation or verification step before running analysis. Users can submit garbage inputs and get misleading results. No input validation beyond "location not found".
 
 **What's missing:**
@@ -89,7 +89,7 @@
 
 ---
 
-### U4 — Cost Sahi Nai Hai (Cost is Wrong) [ ]
+### U4 — Cost Sahi Nai Hai (Cost is Wrong) [x]
 **Problem:** Several cost calculation issues make prices unrealistic or inaccurate.
 
 **Known issues found in `services/cost.py`:**
@@ -117,7 +117,7 @@
 
 ---
 
-### U5 — Bus/Metro: Show Stops [ ]
+### U5 — Bus/Metro: Show Stops [x]
 **Problem:** When user selects Bus or Metro as their mode, the app recommends it but doesn't tell them:
 - Which specific stop to board from
 - Which stop to get off at
@@ -151,7 +151,7 @@
 
 ---
 
-### U6 — City Heatmap Fix [ ]
+### U6 — City Heatmap Fix [~] (partial — day selector functional; full backend rework pending)
 **Problem:** The heatmap is visually appealing but factually incorrect in several ways:
 
 **Issues:**
@@ -180,7 +180,7 @@
 
 ---
 
-### U7 — Weekly Heatmap Date Add [ ]
+### U7 — Weekly Heatmap Date Add [x]
 **Problem:** The weekly planner table shows "Sunday", "Monday" etc. but doesn't show the actual calendar date for each day. User can't tell which Monday or what date is being referenced.
 
 **Files to change:**
@@ -264,7 +264,7 @@
 
 ---
 
-### D7 — Passengers Not Validated Per Mode [ ]
+### D7 — Passengers Not Validated Per Mode [x]
 **Problem:** User can request 5 passengers for a bike ride. Backend returns a cost but it's nonsensical. Each mode has real capacity limits:
 - Bike: 1 passenger
 - Auto: 1–2 passengers (legal limit 3 in India)
@@ -396,4 +396,10 @@ _(Fill in as fixes are implemented)_
 
 | Issue | Fixed In | Notes |
 |-------|----------|-------|
-| — | — | — |
+| U2 | April 2026 | geocode() returns displayName; shown below inputs on dashboard + weekly |
+| U3 | April 2026 | Hyderabad bbox, same-location, past-time warning; backend Pydantic validators |
+| U4 | April 2026 | Round-trip toggle (dashboard default off, weekly default on); backend `round_trip` param |
+| U5 | April 2026 | Backend finds boarding/alighting stops; shown inline on transport alternatives |
+| U6 | April 2026 | Day selector now uses getDayMultiplier(); stop markers use real lat/lon |
+| U7 | April 2026 | Date shown as "Apr 19" in table, risk strip, chart x-axis, summary cards |
+| D7 | April 2026 | bike=1, auto=3, cab_mini=4, cab_sedan=4, cab_suv=7; bus 1km stop check; bus wait 15–45 min |

@@ -90,23 +90,53 @@ def bike_surge(hour: int, is_raining: bool, day_of_week: int) -> float:
     return 1.0
 
 
+# ── Road factor — straight-line to actual road distance ───────
+ROAD_FACTOR = 1.4
+
+
 # ── Travel time (Haversine + speed assumptions) ───────────────
 def _travel_time_min(mode: str, distance_km: float, hour: int) -> int:
+    """Internal: travel time used by cost builders for commute planning."""
     is_peak = hour in {7, 8, 9, 17, 18, 19, 20}
+    road_km = distance_km * ROAD_FACTOR
     if mode in {"cab_mini", "cab_sedan"}:
         speed = 25.0 if is_peak else 35.0
-        return max(5, round(distance_km / speed * 60))
+        return max(5, round(road_km / speed * 60))
     if mode == "auto":
         speed = 20.0 if is_peak else 28.0
-        return max(5, round(distance_km / speed * 60))
+        return max(5, round(road_km / speed * 60))
     if mode == "bike":
         speed = 22.0 if is_peak else 30.0
-        return max(3, round(distance_km / speed * 60))
+        return max(3, round(road_km / speed * 60))
     if mode == "metro":
-        return max(10, round(distance_km / 40.0 * 60) + 8)   # +8 min walk/wait
+        return max(10, round(distance_km / 40.0 * 60) + 8)  # metro: track distance, no road factor
     if mode == "bus":
-        return max(12, round(distance_km / 15.0 * 60) + 10)  # +10 min wait
+        return max(12, round(road_km / 15.0 * 60) + 10)
     return 30
+
+
+def travel_only_min(mode: str, distance_km: float, hour: int) -> int:
+    """
+    Pure road travel time — no wait, no walk. Applies ROAD_FACTOR for road
+    modes; metro uses track distance (no road factor).
+    mode values: cab_mini | cab_sedan | cab_suv | auto | bike | metro | bus
+    """
+    is_peak = hour in {7, 8, 9, 17, 18, 19, 20}
+    road_km = distance_km * ROAD_FACTOR
+    if mode in {"cab_mini", "cab_sedan", "cab_suv"}:
+        speed = 25.0 if is_peak else 35.0
+        return max(5, round(road_km / speed * 60))
+    if mode == "auto":
+        speed = 20.0 if is_peak else 28.0
+        return max(5, round(road_km / speed * 60))
+    if mode == "bike":
+        speed = 22.0 if is_peak else 30.0
+        return max(3, round(road_km / speed * 60))
+    if mode == "metro":
+        return max(8, round(distance_km / 40.0 * 60))  # no road factor
+    if mode == "bus":
+        return max(8, round(road_km / 15.0 * 60))
+    return 20
 
 
 # ── Per-mode cost builders ────────────────────────────────────
@@ -152,7 +182,7 @@ def _cab_sedan_cost(
 def _auto_cost(
     distance_km: float, hour: int, is_raining: bool, day_of_week: int, passengers: int
 ) -> CostResult:
-    """App-based auto — ₹29 base + ₹13/km after first km. Light surge (MVAG 2025)."""
+    """App-based auto — ₹29 base + ₹13/km after first km. Light surge (MVAG 2025). Max 3 passengers."""
     base = 29.0 + max(0.0, distance_km - 1.0) * 13.0
     surge = auto_surge(hour, is_raining, day_of_week)
     return CostResult(
@@ -161,7 +191,7 @@ def _auto_cost(
         surge_multiplier=surge,
         final_cost_inr=round(base * surge, 2),
         time_min=_travel_time_min("auto", distance_km, hour),
-        available=passengers <= 2,
+        available=passengers <= 3,
     )
 
 
@@ -222,20 +252,35 @@ def _metro_cost(distance_km: float, hour: int) -> CostResult:
     )
 
 
-def _bus_cost(distance_km: float, hour: int) -> CostResult:
-    """TSRTC bus — ≤5km→₹10, ≤10km→₹20, >10km→₹30. No surge."""
+def bus_wait_min(hour: int, day_of_week: int) -> int:
+    """
+    Realistic TSRTC bus wait time based on service frequency.
+    Peak weekday: ~15 min. Off-peak: ~30 min. Night/weekend night: ~45 min.
+    """
+    is_peak = hour in {7, 8, 9, 17, 18, 19, 20} and day_of_week < 5
+    if is_peak:
+        return 15
+    if hour >= 22 or hour <= 5:
+        return 45
+    return 30
+
+
+def _bus_cost(distance_km: float, hour: int, day_of_week: int) -> CostResult:
+    """TSRTC bus — ≤5km→₹10, ≤10km→₹20, >10km→₹30. No surge. Wait time varies by hour."""
     if distance_km <= 5:
         fare = 10.0
     elif distance_km <= 10:
         fare = 20.0
     else:
         fare = 30.0
+    wait = bus_wait_min(hour, day_of_week)
+    travel = max(12, round(distance_km / 15.0 * 60) + wait)
     return CostResult(
         mode="bus", variant=None,
         base_cost_inr=fare,
         surge_multiplier=1.0,
         final_cost_inr=fare,
-        time_min=_travel_time_min("bus", distance_km, hour),
+        time_min=travel,
         available=True,
     )
 
@@ -260,7 +305,7 @@ def calculate_all_costs(
         _cab_sedan_cost(distance_km, hour, is_raining, day_of_week, passengers),
         _cab_suv_cost(distance_km, hour, is_raining, day_of_week, passengers),
         _metro_cost(distance_km, hour),
-        _bus_cost(distance_km, hour),
+        _bus_cost(distance_km, hour, day_of_week),
     ]
 
 

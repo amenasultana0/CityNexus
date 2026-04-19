@@ -102,3 +102,8 @@ def get_zone_name_for_location(session: Session, lat: float, lon: float) -> str:
     """Return the nearest zone name for a coordinate pair."""
     area = _nearest_area_context(session, lat, lon)
     return area.zone_name if area else "Hyderabad"
+
+
+def get_area_context(session: Session, lat: float, lon: float):
+    """Return AreaContext for the zone nearest to (lat, lon)."""
+    return _nearest_area_context(session, lat, lon)

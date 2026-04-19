@@ -61,8 +61,16 @@ function getTimeMultiplier(hour: number): number {
   return 1.0
 }
 
-function getRateForHour(base: number, hour: number): number {
-  return Math.min(0.95, base * getTimeMultiplier(hour))
+// Day-of-week multipliers (0=Mon … 6=Sun)
+function getDayMultiplier(day: number): number {
+  if (day === 6) return 0.72   // Sunday — low demand
+  if (day === 5) return 0.82   // Saturday — moderate
+  if (day === 0 || day === 4) return 1.08  // Mon/Fri — slightly elevated
+  return 1.0  // Tue–Thu normal
+}
+
+function getRateForHour(base: number, hour: number, day: number): number {
+  return Math.min(0.95, base * getTimeMultiplier(hour) * getDayMultiplier(day))
 }
 
 function getZoneColor(cancelRate: number): string {
@@ -142,7 +150,7 @@ function HeatmapPage() {
     if (!showZones) return
 
     ZONES.forEach((zone) => {
-      const rate = getRateForHour(zone.baseCancelRate, selectedHour)
+      const rate = getRateForHour(zone.baseCancelRate, selectedHour, selectedDay)
       const color = getZoneColor(rate)
       const [lat, lon] = zone.center
       const s = zone.size
@@ -182,11 +190,11 @@ function HeatmapPage() {
       if (!q.data) return
       const center = KEY_ZONE_CENTERS[qi]
       q.data.suggestions.forEach((stop) => {
-        // Approximate location from walk distance (rough offset for display)
-        const offsetLat = center.lat + (stop.distance_m / 111000) * (qi % 2 === 0 ? 1 : -1)
-        const offsetLon = center.lon + (stop.distance_m / 111000) * (qi % 3 === 0 ? 1 : -0.5)
+        // Use actual coordinates from backend; fall back to offset approximation if missing
+        const markerLat = stop.lat && stop.lat !== 0 ? stop.lat : center.lat + (stop.distance_m / 111000) * (qi % 2 === 0 ? 1 : -1)
+        const markerLon = stop.lon && stop.lon !== 0 ? stop.lon : center.lon + (stop.distance_m / 111000) * (qi % 3 === 0 ? 1 : -0.5)
 
-        const marker = L.circleMarker([offsetLat, offsetLon], {
+        const marker = L.circleMarker([markerLat, markerLon], {
           radius: 8,
           color: "#fff",
           weight: 2,
@@ -206,7 +214,7 @@ function HeatmapPage() {
   }, [stopsQueries, showStops])
 
   const selectedRate = selectedZone
-    ? getRateForHour(selectedZone.baseCancelRate, selectedHour)
+    ? getRateForHour(selectedZone.baseCancelRate, selectedHour, selectedDay)
     : null
 
   const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
