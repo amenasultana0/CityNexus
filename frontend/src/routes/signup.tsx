@@ -1,4 +1,4 @@
-import { Container, Flex, Image, Input, Text } from "@chakra-ui/react"
+import { Box, Container, Flex, Input, Text } from "@chakra-ui/react"
 import {
   createFileRoute,
   Link as RouterLink,
@@ -14,14 +14,13 @@ import { InputGroup } from "@/components/ui/input-group"
 import { PasswordInput } from "@/components/ui/password-input"
 import useAuth, { isLoggedIn } from "@/hooks/useAuth"
 import { confirmPasswordRules, emailPattern, passwordRules } from "@/utils"
-import Logo from "/assets/images/fastapi-logo.svg"
 
 export const Route = createFileRoute("/signup")({
   component: SignUp,
   beforeLoad: async () => {
     if (isLoggedIn()) {
       throw redirect({
-        to: "/",
+        to: "/dashboard",
       })
     }
   },
@@ -65,14 +64,19 @@ function SignUp() {
         gap={4}
         centerContent
       >
-        <Image
-          src={Logo}
-          alt="FastAPI logo"
-          height="auto"
-          maxW="2xs"
-          alignSelf="center"
-          mb={4}
-        />
+        <Box textAlign="center" mb={2}>
+          <Text
+            fontSize="2xl"
+            fontWeight="bold"
+            color="#00d4aa"
+            letterSpacing="tight"
+          >
+            CityNexus
+          </Text>
+          <Text fontSize="xs" color="#94a3b8" letterSpacing="widest">
+            Ride Intelligence · Hyderabad
+          </Text>
+        </Box>
         <Field
           invalid={!!errors.full_name}
           errorText={errors.full_name?.message}

@@ -100,6 +100,12 @@ const HOW_IT_WORKS = [
   },
 ]
 
+const CLASS_RECALL = [
+  { label: "Low Risk", recall: "100.00%", color: "#10b981" },
+  { label: "Medium Risk", recall: "56.88%", color: "#f59e0b" },
+  { label: "High Risk", recall: "73.39%", color: "#ef4444" },
+]
+
 const DATA_STATS = [
   { label: "Transport Stops", value: "8,035" },
   { label: "Constituencies", value: "25" },
@@ -444,6 +450,37 @@ function InsightsPage() {
               ))}
             </VStack>
           </Flex>
+        </Box>
+
+        {/* ── Per-Class Recall ── */}
+        <Box bg="bg.subtle" borderRadius="xl" p={6} borderWidth="1px">
+          <Heading size="sm" color="gray.500" mb={4}>
+            PER-CLASS RECALL (Test Set)
+          </Heading>
+          <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={4}>
+            {CLASS_RECALL.map((c) => (
+              <Box
+                key={c.label}
+                bg="bg"
+                borderRadius="lg"
+                p={5}
+                borderWidth="1px"
+                borderTopWidth="3px"
+                borderTopColor={c.color}
+                textAlign="center"
+              >
+                <Text fontSize="2xl" fontWeight="bold" color={c.color} mb={1}>
+                  {c.recall}
+                </Text>
+                <Text fontSize="sm" color="gray.500">
+                  {c.label} Recall
+                </Text>
+              </Box>
+            ))}
+          </Grid>
+          <Text fontSize="xs" color="gray.500" mt={4}>
+            Overall Accuracy: <strong>88.85%</strong> · Low recall is 100% because all low-risk trips are correctly classified. Medium recall (56.88%) reflects class overlap. High recall (73.39%) shows strong detection of high-risk bookings.
+          </Text>
         </Box>
 
         {/* ── How Predictions Work ── */}

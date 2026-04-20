@@ -1,6 +1,6 @@
 import { Box, Flex, Icon, Text } from "@chakra-ui/react"
 import { useQueryClient } from "@tanstack/react-query"
-import { Link as RouterLink } from "@tanstack/react-router"
+import { Link as RouterLink, useRouterState } from "@tanstack/react-router"
 import {
   FiHome,
   FiMap,
@@ -13,8 +13,10 @@ import type { IconType } from "react-icons/lib"
 
 import type { UserPublic } from "@/client"
 
+const BLUE = "#1a56db"
+
 const mainItems = [
-  { icon: FiHome, title: "Dashboard", path: "/" },
+  { icon: FiHome, title: "Dashboard", path: "/dashboard" },
   { icon: FiMap, title: "City Heatmap", path: "/heatmap" },
   { icon: FiCalendar, title: "Weekly Commute", path: "/weekly" },
   { icon: FiBarChart2, title: "Model Insights", path: "/insights" },
@@ -33,33 +35,75 @@ interface Item {
 const SidebarItems = ({ onClose }: SidebarItemsProps) => {
   const queryClient = useQueryClient()
   const currentUser = queryClient.getQueryData<UserPublic>(["currentUser"])
+  const routerState = useRouterState()
+  const currentPath = routerState.location.pathname
 
   const renderItems = (items: Item[]) =>
-    items.map(({ icon, title, path }) => (
-      <RouterLink key={title} to={path as any} onClick={onClose}>
-        <Flex
-          gap={4}
-          px={4}
-          py={2}
-          _hover={{ background: "gray.subtle" }}
-          alignItems="center"
-          fontSize="sm"
-        >
-          <Icon as={icon} alignSelf="center" />
-          <Text ml={2}>{title}</Text>
-        </Flex>
-      </RouterLink>
-    ))
+    items.map(({ icon, title, path }) => {
+      const isActive = currentPath === path
+      return (
+        <RouterLink key={title} to={path as any} onClick={onClose}>
+          <Flex
+            gap={3}
+            px={3}
+            py={2.5}
+            borderRadius="8px"
+            bg={isActive ? "white" : "transparent"}
+            alignItems="center"
+            fontSize="0.875rem"
+            color={isActive ? BLUE : "rgba(255,255,255,0.72)"}
+            fontWeight={isActive ? "700" : "400"}
+            _hover={{
+              bg: isActive ? "white" : "rgba(255,255,255,0.10)",
+              color: isActive ? BLUE : "white",
+            }}
+            mb={0.5}
+            transition="all 0.15s ease"
+            style={
+              isActive
+                ? { boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }
+                : undefined
+            }
+          >
+            <Icon
+              as={icon}
+              alignSelf="center"
+              fontSize="1rem"
+              color={isActive ? BLUE : "rgba(255,255,255,0.72)"}
+            />
+            <Text fontSize="inherit">{title}</Text>
+          </Flex>
+        </RouterLink>
+      )
+    })
 
   return (
     <>
-      <Text fontSize="xs" px={4} py={2} fontWeight="bold" color="gray.500">
-        NAVIGATE
+      <Text
+        fontSize="0.6rem"
+        px={3}
+        pt={1}
+        pb={2}
+        fontWeight="700"
+        color="rgba(255,255,255,0.40)"
+        letterSpacing="3px"
+        textTransform="uppercase"
+      >
+        Navigate
       </Text>
-      <Box mb={4}>{renderItems(mainItems)}</Box>
+      <Box mb={5}>{renderItems(mainItems)}</Box>
 
-      <Text fontSize="xs" px={4} py={2} fontWeight="bold" color="gray.500">
-        ACCOUNT
+      <Text
+        fontSize="0.6rem"
+        px={3}
+        pt={1}
+        pb={2}
+        fontWeight="700"
+        color="rgba(255,255,255,0.40)"
+        letterSpacing="3px"
+        textTransform="uppercase"
+      >
+        Account
       </Text>
       <Box mb={4}>
         {renderItems([{ icon: FiSettings, title: "Settings", path: "/settings" }])}
@@ -67,8 +111,17 @@ const SidebarItems = ({ onClose }: SidebarItemsProps) => {
 
       {currentUser?.is_superuser && (
         <>
-          <Text fontSize="xs" px={4} py={2} fontWeight="bold" color="gray.500">
-            ADMIN
+          <Text
+            fontSize="0.6rem"
+            px={3}
+            pt={1}
+            pb={2}
+            fontWeight="700"
+            color="rgba(255,255,255,0.40)"
+            letterSpacing="3px"
+            textTransform="uppercase"
+          >
+            Admin
           </Text>
           <Box>
             {renderItems([
