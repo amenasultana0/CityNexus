@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Badge,
@@ -236,6 +236,13 @@ function Dashboard() {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [expandedFactor, setExpandedFactor] = useState<number | null>(null)
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null)
+  const [preference, setPreference] = useState(0.5)   // 0 = cheapest · 1 = fastest
+  const [debouncedPref, setDebouncedPref] = useState(0.5)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPref(preference), 150)
+    return () => clearTimeout(t)
+  }, [preference])
 
   const handleSubmit = async () => {
     if (!pickupText || !destText) return
@@ -325,30 +332,43 @@ function Dashboard() {
   const pickupQuery = useQuery({
     queryKey: ["pickup", formData],
     queryFn: () => getOptimalPickup({
-      origin_lat: formData!.originLat, origin_lon: formData!.originLon, radius_m: 1000,
+      origin_lat: formData!.originLat, origin_lon: formData!.originLon, radius_m: 1500,
     }),
     enabled: !!formData,
   })
 
   // ── Computed ─────────────────────────────────────────────────
   const availableOptions = alternativesQuery.data?.options.filter((o) => o.available) ?? []
+
+  // Shared scorer — weights shift smoothly with the cost↔speed slider
+  const _score = (o: typeof availableOptions[0], maxCost: number, maxTime: number, pref: number) => {
+    const riskOrder: Record<string, number> = { low: 0, moderate: 1, medium: 1, high: 2 }
+    const timeW = (0.20 + 0.60 * pref) * 0.80   // 0.16 → 0.64
+    const costW = (0.80 - 0.60 * pref) * 0.80   // 0.64 → 0.16
+    return (
+      timeW * (o.time_min / maxTime) +
+      costW * (o.cost_inr / maxCost) +
+      0.10 * ((riskOrder[o.risk_level] ?? 1) / 2) +
+      0.10 * (1 - o.reliability_score / 10)
+    )
+  }
+
   const bestOption = (() => {
     if (!availableOptions.length) return undefined
-    const riskOrder: Record<string, number> = { low: 0, moderate: 1, medium: 1, high: 2 }
-    // Never pick something more than 2× the fastest as "best" — cheap price can't justify 2× travel time
     const minTime = Math.min(...availableOptions.map((o) => o.time_min))
     const pool = availableOptions.filter((o) => o.time_min <= minTime * 2.0)
     const candidates = pool.length > 0 ? pool : availableOptions
     const maxCost = Math.max(...candidates.map((o) => o.cost_inr), 1)
     const maxTime = Math.max(...candidates.map((o) => o.time_min), 1)
-    return [...candidates].sort((a, b) => {
-      const score = (o: typeof a) =>
-        0.50 * (o.time_min / maxTime) +
-        0.30 * (o.cost_inr / maxCost) +
-        0.10 * ((riskOrder[o.risk_level] ?? 1) / 2) +
-        0.10 * (1 - o.reliability_score / 10)
-      return score(a) - score(b)
-    })[0]
+    return [...candidates].sort((a, b) => _score(a, maxCost, maxTime, debouncedPref) - _score(b, maxCost, maxTime, debouncedPref))[0]
+  })()
+
+  // Sorted list for the alternatives panel — reorders as slider moves
+  const sortedOptions = (() => {
+    if (!availableOptions.length) return availableOptions
+    const maxCost = Math.max(...availableOptions.map((o) => o.cost_inr), 1)
+    const maxTime = Math.max(...availableOptions.map((o) => o.time_min), 1)
+    return [...availableOptions].sort((a, b) => _score(a, maxCost, maxTime, debouncedPref) - _score(b, maxCost, maxTime, debouncedPref))
   })()
   const savings = (() => {
     if (!availableOptions.length || !bestOption) return null
@@ -903,15 +923,111 @@ function Dashboard() {
                     </Text>
                   )}
                 </Flex>
+
+                {/* ── Cost ↔ Speed Slider ── */}
+                <Box mb={5} px={1}>
+                  {/* Labels row */}
+                  <Flex align="center" justify="space-between" mb={3}>
+                    <Flex align="center" gap={1.5}>
+                      <Text fontSize="lg" style={{ transition: `transform 0.2s ${SPRING}`, transform: preference < 0.3 ? "scale(1.3)" : "scale(1)" }}>💰</Text>
+                      <Text fontSize="xs" fontWeight={preference < 0.3 ? "700" : "500"}
+                        color={preference < 0.3 ? GREEN : MUTED}
+                        style={{ transition: `color 0.3s ${EASE}` }}>
+                        Cheapest
+                      </Text>
+                    </Flex>
+
+                    {/* Center mode badge */}
+                    <Box
+                      px={3} py={1} borderRadius="full"
+                      fontSize="0.68rem" fontWeight="700" letterSpacing="0.06em" textTransform="uppercase"
+                      style={{
+                        transition: `all 0.3s ${EASE}`,
+                        background: preference < 0.3
+                          ? `linear-gradient(135deg, ${GREEN}22, ${GREEN}11)`
+                          : preference > 0.7
+                          ? `linear-gradient(135deg, ${BLUE}22, ${BLUE}11)`
+                          : `linear-gradient(135deg, ${TEAL}22, ${TEAL}11)`,
+                        color: preference < 0.3 ? GREEN : preference > 0.7 ? BLUE : TEAL,
+                        border: `1px solid ${preference < 0.3 ? GREEN : preference > 0.7 ? BLUE : TEAL}40`,
+                        boxShadow: `0 2px 8px ${preference < 0.3 ? GREEN : preference > 0.7 ? BLUE : TEAL}20`,
+                      }}
+                    >
+                      {preference < 0.25 ? "💸 Cost-focused" : preference > 0.75 ? "⚡ Speed-focused" : "⚖️ Balanced"}
+                    </Box>
+
+                    <Flex align="center" gap={1.5}>
+                      <Text fontSize="xs" fontWeight={preference > 0.7 ? "700" : "500"}
+                        color={preference > 0.7 ? BLUE : MUTED}
+                        style={{ transition: `color 0.3s ${EASE}` }}>
+                        Fastest
+                      </Text>
+                      <Text fontSize="lg" style={{ transition: `transform 0.2s ${SPRING}`, transform: preference > 0.7 ? "scale(1.3)" : "scale(1)" }}>⚡</Text>
+                    </Flex>
+                  </Flex>
+
+                  {/* Track + thumb */}
+                  <Box position="relative" h="28px" display="flex" alignItems="center">
+                    {/* Background gradient track */}
+                    <Box
+                      w="full" h="6px" borderRadius="full"
+                      style={{ background: `linear-gradient(to right, ${GREEN}, ${TEAL} 50%, ${BLUE})`, opacity: 0.18 }}
+                    />
+                    {/* Filled portion */}
+                    <Box
+                      position="absolute" left={0} h="6px" borderRadius="full"
+                      style={{
+                        width: `${preference * 100}%`,
+                        background: `linear-gradient(to right, ${GREEN}, ${preference > 0.5 ? BLUE : TEAL})`,
+                        transition: `width 0.05s linear, background 0.3s ${EASE}`,
+                        boxShadow: `0 0 8px ${preference < 0.3 ? GREEN : preference > 0.7 ? BLUE : TEAL}60`,
+                      }}
+                    />
+                    {/* Native input overlaid invisibly — handles all interaction */}
+                    <input
+                      type="range" min={0} max={1} step={0.01}
+                      value={preference}
+                      onChange={(e) => { setPreference(parseFloat(e.target.value)); setSelectedIdx(null) }}
+                      style={{
+                        position: "absolute", inset: 0, width: "100%", height: "100%",
+                        opacity: 0, cursor: "pointer", margin: 0,
+                      }}
+                    />
+                    {/* Visual thumb */}
+                    <Box
+                      position="absolute" top="50%" w="22px" h="22px" borderRadius="full"
+                      bg="white"
+                      style={{
+                        left: `${preference * 100}%`,
+                        transform: "translate(-50%, -50%)",
+                        border: `2.5px solid ${preference < 0.3 ? GREEN : preference > 0.7 ? BLUE : TEAL}`,
+                        boxShadow: `0 2px 8px rgba(0,0,0,0.15), 0 0 0 5px ${preference < 0.3 ? GREEN : preference > 0.7 ? BLUE : TEAL}18`,
+                        transition: `border-color 0.3s ${EASE}, box-shadow 0.3s ${EASE}`,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  </Box>
+
+                  {/* Tick marks */}
+                  <Flex justify="space-between" px="11px" mt={1}>
+                    {[0, 1, 2, 3, 4].map((t) => (
+                      <Box key={t} w="1px" h="4px" borderRadius="full"
+                        bg={Math.abs(preference - t / 4) < 0.1 ? (preference < 0.3 ? GREEN : preference > 0.7 ? BLUE : TEAL) : BORDER}
+                        style={{ transition: `background 0.3s ${EASE}` }}
+                      />
+                    ))}
+                  </Flex>
+                </Box>
+
                 {alternativesQuery.isLoading ? (
                   <VStack gap={3}>
                     <Skeleton h="64px" />
                     <Skeleton h="64px" />
                     <Skeleton h="64px" />
                   </VStack>
-                ) : availableOptions.length > 0 ? (
+                ) : sortedOptions.length > 0 ? (
                   <VStack gap={2} align="stretch">
-                    {availableOptions.map((opt, i) => {
+                    {sortedOptions.map((opt, i) => {
                       const isBest = opt === bestOption
                       const isSelected = i === selectedIdx
                       const color = modeColor(opt.mode)

@@ -2,7 +2,7 @@ import { Box, Flex, Text } from "@chakra-ui/react"
 import { useQueryClient } from "@tanstack/react-query"
 import type { UserPublic } from "@/client"
 
-const RED = "#721c1c"
+const RED = "#752626"
 const GOLD = "#F59E0B"
 
 export function TopNavbar() {
@@ -19,7 +19,7 @@ export function TopNavbar() {
       flexShrink={0}
       zIndex={100}
       style={{
-        background: "linear-gradient(180deg, #4d6b9c 0%, #16213e 100%)",
+        background: "linear-gradient(180deg, #4d6b9c 0%, #1d2a4f 100%)",
         boxShadow: `0 3px 0 ${RED}, 0 4px 20px rgba(72, 3, 3, 0.25)`,
       }}
     >
@@ -49,8 +49,8 @@ export function TopNavbar() {
           </Box>
 
           <Text
-            fontWeight="800"
-            fontSize="1.3rem"
+            fontWeight="650"
+            fontSize="1.8rem"
             letterSpacing="-0.5px"
             lineHeight="1"
           >
@@ -66,7 +66,7 @@ export function TopNavbar() {
             mx={1}
           />
           <Text
-            fontSize="0.6rem"
+            fontSize="0.9rem"
             color="rgba(255,255,255,0.38)"
             letterSpacing="3.5px"
             textTransform="uppercase"
