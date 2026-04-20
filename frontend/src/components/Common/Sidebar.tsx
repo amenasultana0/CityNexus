@@ -30,40 +30,16 @@ const SidebarContent = ({ onClose }: { onClose?: () => void }) => {
       flexDir="column"
       h="100%"
       style={{
-        background: "linear-gradient(180deg, #1e40af 0%, #1a56db 100%)",
+        background: "linear-gradient(180deg, #4d6b9c 0%, #16213e 100%)",
       }}
     >
-      {/* Logo */}
-      <Box px={6} pt={6} pb={5} borderBottom="1px solid rgba(255,255,255,0.12)">
-        <Flex align="center" gap={2} mb={1}>
-          <Text as="span" color="#00d4aa" fontSize="1.1rem" lineHeight="1">●</Text>
-          <Text
-            fontSize="1.3rem"
-            fontWeight="bold"
-            color="white"
-            letterSpacing="-0.3px"
-          >
-            CityNexus
-          </Text>
-        </Flex>
-        <Text
-          fontSize="0.62rem"
-          color="rgba(255,255,255,0.55)"
-          letterSpacing="2px"
-          textTransform="uppercase"
-          pl="1.4rem"
-        >
-          Ride Intelligence
-        </Text>
-      </Box>
-
-      {/* Navigation */}
+      {/* Navigation (kept, only heading removed) */}
       <Box flex="1" overflowY="auto" p={3} pt={4}>
         <SidebarItems onClose={onClose} />
       </Box>
 
       {/* User profile */}
-      <Box px={4} pb={0}>
+      <Box px={4} pb={2} flexShrink={0}>
         <Box h="1px" bg="rgba(255,255,255,0.15)" mb={4} />
         <Flex align="center" gap={3} mb={4}>
           {/* Avatar */}
@@ -81,6 +57,7 @@ const SidebarContent = ({ onClose }: { onClose?: () => void }) => {
               {avatarLetter}
             </Text>
           </Flex>
+
           {/* Name + email */}
           <Box flex="1" minW={0}>
             <Text color="white" fontWeight="bold" fontSize="sm" truncate>
@@ -90,6 +67,7 @@ const SidebarContent = ({ onClose }: { onClose?: () => void }) => {
               {email}
             </Text>
           </Box>
+
           {/* Logout */}
           <IconButton
             aria-label="Log out"
@@ -105,7 +83,7 @@ const SidebarContent = ({ onClose }: { onClose?: () => void }) => {
       </Box>
 
       {/* Live indicator */}
-      <Box px={5} pb={5}>
+      <Box px={5} pb={6} flexShrink={0}>
         <Flex alignItems="center" gap={2}>
           <Box w={2} h={2} borderRadius="full" bg="#10b981" flexShrink={0} />
           <Text fontSize="xs" color="rgba(255,255,255,0.6)">
@@ -145,7 +123,12 @@ const Sidebar = () => {
         <DrawerContent maxW="xs" style={{ padding: 0 }}>
           <DrawerCloseTrigger color="white" />
           <DrawerBody p={0} h="100%">
-            <Box h="100%" style={{ background: "linear-gradient(180deg, #1e40af 0%, #1a56db 100%)" }}>
+            <Box
+              h="100%"
+              style={{
+                background: "linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)",
+              }}
+            >
               <SidebarContent onClose={() => setOpen(false)} />
             </Box>
           </DrawerBody>

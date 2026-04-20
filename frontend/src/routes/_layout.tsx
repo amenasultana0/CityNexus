@@ -2,6 +2,7 @@ import { Box, Flex } from "@chakra-ui/react"
 import { createFileRoute, Outlet } from "@tanstack/react-router"
 
 import Sidebar from "@/components/Common/Sidebar"
+import { TopNavbar } from "@/components/Common/TopNavbar"
 
 export const Route = createFileRoute("/_layout")({
   component: Layout,
@@ -16,11 +17,17 @@ export const Route = createFileRoute("/_layout")({
 
 function Layout() {
   return (
-    <Flex h="100vh" overflow="hidden">
-      <Sidebar />
-      <Box flex="1" overflowY="auto" bg="#f0f4f8">
-        <Outlet />
-      </Box>
+    <Flex flexDir="column" h="100vh" overflow="hidden">
+      {/* Full-width top navbar */}
+      <TopNavbar />
+
+      {/* Sidebar + page content below navbar */}
+      <Flex flex="1" overflow="hidden">
+        <Sidebar />
+        <Box flex="1" overflowY="auto" bg="#f5f5f4">
+          <Outlet />
+        </Box>
+      </Flex>
     </Flex>
   )
 }

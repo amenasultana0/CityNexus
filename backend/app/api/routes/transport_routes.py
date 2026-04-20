@@ -91,6 +91,21 @@ def _reliability_score(cancel_rate: float) -> int:
     return max(1, min(10, round((1.0 - cancel_rate) * 10)))
 
 
+def _bus_reliability_score(bus_stop_count: int, hour: int, day_of_week: int) -> int:
+    """
+    Bus reliability: 3–6 based on stop density.
+    Dense areas score flat 6 — peak adds frequency but also crowd/delays, net neutral.
+    Moderate area scores 5 peak / 4 off-peak (fewer buses but less chaos).
+    Sparse area always 3.
+    """
+    is_peak = hour in {7, 8, 9, 17, 18, 19, 20} and day_of_week < 5
+    if bus_stop_count >= 5:
+        return 6   # dense: peak adds buses but also crowd — flat score
+    if bus_stop_count >= 2:
+        return 5 if is_peak else 4
+    return 3
+
+
 def _reason(mode: str, option: Any, risk_level: str, hour: int = 9, day_of_week: int = 0) -> str:
     if not option.available:
         return "Not available for selected passenger count"
@@ -236,7 +251,12 @@ def transport_alternatives(
 
     options: list[TransportOption] = []
     for c in all_costs:
-        mode_risk = demand_info.risk_level if c.mode not in {"metro", "bus"} else "low"
+        if c.mode == "metro":
+            mode_risk = "low"
+        elif c.mode == "bus":
+            mode_risk = "moderate"   # schedule-based, not cancel-prone, but unreliable waits
+        else:
+            mode_risk = demand_info.risk_level
 
         # Walk distances for transit modes
         board_walk_m = 0
@@ -288,7 +308,11 @@ def transport_alternatives(
             cost_inr=c.final_cost_inr,
             surge_multiplier=c.surge_multiplier,
             risk_level=mode_risk,
-            reliability_score=10 if c.mode in {"metro", "bus"} else rel_score,
+            reliability_score=(
+                9 if c.mode == "metro"
+                else _bus_reliability_score(bus_stop_count, hour, day_of_week) if c.mode == "bus"
+                else rel_score
+            ),
             available=available,
             reason=reason,
             vehicles_needed=c.vehicles_needed,

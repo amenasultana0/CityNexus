@@ -13,7 +13,7 @@ import type { IconType } from "react-icons/lib"
 
 import type { UserPublic } from "@/client"
 
-const BLUE = "#1a56db"
+const BLUE = "#B91C1C"
 
 const mainItems = [
   { icon: FiHome, title: "Dashboard", path: "/dashboard" },
