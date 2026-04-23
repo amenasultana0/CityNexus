@@ -1,6 +1,7 @@
 import uuid
 
 from pydantic import EmailStr
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -198,5 +199,32 @@ class UserSearch(SQLModel, table=True):
     dest_lon: float
     recommended_mode: str | None = Field(default=None, max_length=50)
     created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+class BusRoute(SQLModel, table=True):
+    """
+    Scraped Hyderabad bus route schedule data from hyderabadcitybus.in.
+    One row per direction — "forward" and "return" stored separately.
+    Populated by backend/app/scripts/scrape_tsrtc.py — NOT real-time.
+    """
+
+    __tablename__ = "busroute"
+    __table_args__ = (
+        UniqueConstraint("route", "direction", name="uq_busroute_route_direction"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    route: str = Field(index=True, max_length=20)               # e.g. "8A"
+    direction: str = Field(max_length=10)                        # "forward" | "return"
+    source: str | None = Field(default=None, max_length=255)
+    destination: str | None = Field(default=None, max_length=255)
+    first_bus: str | None = Field(default=None, max_length=10)  # HH:MM (24h)
+    last_bus: str | None = Field(default=None, max_length=10)   # HH:MM (24h)
+    trips_per_day: int | None = Field(default=None)
+    timetable_json: str | None = Field(default=None)             # JSON array of HH:MM departures
+    stops_json: str | None = Field(default=None)                 # JSON array of stop names
+    last_updated: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
