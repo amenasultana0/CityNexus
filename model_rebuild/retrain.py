@@ -13,7 +13,6 @@ import joblib
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
-from imblearn.over_sampling import SMOTE
 from xgboost import XGBClassifier
 
 # ── STEP 1: Paths ─────────────────────────────────────────────────────────────
@@ -169,19 +168,9 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 print(f"Train: {X_train.shape}, Test: {X_test.shape}")
 
-# ── STEP 7: SMOTE ─────────────────────────────────────────────────────────────
+# ── STEP 7: Train XGBoost ──────────────────────────────────────────────────────
 print("\n" + "=" * 60)
-print("STEP 7 — SMOTE class balancing")
-print("=" * 60)
-
-smote = SMOTE(random_state=42)
-X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
-print("After SMOTE:")
-print(pd.Series(y_train_balanced).value_counts())
-
-# ── STEP 8: Train XGBoost ──────────────────────────────────────────────────────
-print("\n" + "=" * 60)
-print("STEP 8 — Training XGBoost")
+print("STEP 7 — Training XGBoost (scale_pos_weight=3 handles class imbalance)")
 print("=" * 60)
 
 model = XGBClassifier(
@@ -190,14 +179,15 @@ model = XGBClassifier(
     learning_rate=0.1,
     subsample=0.8,
     random_state=42,
-    eval_metric="logloss"
+    eval_metric="logloss",
+    scale_pos_weight=3
 )
-model.fit(X_train_balanced, y_train_balanced)
+model.fit(X_train, y_train)
 print("Model trained successfully")
 
-# ── STEP 9: Evaluate ──────────────────────────────────────────────────────────
+# ── STEP 8: Evaluate ──────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
-print("STEP 9 — Evaluation")
+print("STEP 8 — Evaluation")
 print("=" * 60)
 
 y_pred = model.predict(X_test)
@@ -210,9 +200,9 @@ print("Feature importances (highest to lowest):")
 for feat, imp in importances.items():
     print(f"  {feat}: {imp:.4f}")
 
-# ── STEP 10: Save model and feature names ─────────────────────────────────────
+# ── STEP 9: Save model and feature names ──────────────────────────────────────
 print("\n" + "=" * 60)
-print("STEP 10 — Saving model and feature names")
+print("STEP 9 — Saving model and feature names")
 print("=" * 60)
 
 model_path = os.path.join(MODEL_OUT_DIR, "cancellation_model.pkl")
