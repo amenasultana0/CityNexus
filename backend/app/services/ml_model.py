@@ -53,15 +53,15 @@ def predict_cancellation_risk(features: RideFeatures) -> dict:
     proba = model.predict_proba(arr)[0]
     cancel_prob = float(proba[1])
 
-    if cancel_prob >= 0.6:
-        risk = "high"
-    elif cancel_prob >= 0.4:
-        risk = "medium"
+    if cancel_prob >= 0.55:
+        risk = "High"
+    elif cancel_prob >= 0.35:
+        risk = "Medium"
     else:
-        risk = "low"
+        risk = "Low"
 
     return {
-        "cancellation_probability": round(cancel_prob, 4),
+        "cancel_probability": round(cancel_prob, 4),
         "risk_level": risk,
-        "not_cancelled_probability": round(float(proba[0]), 4),
+        "confidence": round(float(np.max(proba)), 4),
     }
