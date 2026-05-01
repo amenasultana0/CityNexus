@@ -146,8 +146,9 @@ def predict_cancellation(body: PredictRequest, session: SessionDep) -> Any:
     Combines ML/rule-based model, live weather, and historical demand data.
     Result is persisted for analytics. Pass user_id to associate with an account.
     """
-    wx = weather.get_weather()
-    is_raining = body.override_rain if body.override_rain is not None else wx.is_raining
+    wx_impact = weather.get_weather_impact(body.origin_lat, body.origin_lon)
+    is_raining = body.override_rain if body.override_rain is not None else wx_impact["is_raining"]
+    risk_multiplier = wx_impact["risk_multiplier"] if body.override_rain is None else (1.30 if body.override_rain else 1.0)
 
     demand_info = demand.get_demand_for_location(
         session, body.origin_lat, body.origin_lon, body.hour, body.day_of_week
@@ -180,7 +181,7 @@ def predict_cancellation(body: PredictRequest, session: SessionDep) -> Any:
     if body.user_id is not None and not session.get(User, body.user_id):
         raise HTTPException(status_code=422, detail=f"user_id {body.user_id} does not exist")
 
-    # Get ML probability, then blend with rule-based for final result
+    # Get ML probability, then blend with rule-based + weather multiplier for final result
     ml_result = predict_cancellation_risk(features)
     result = hybrid_predict(
         ml_prob=ml_result["cancel_probability"],
@@ -188,6 +189,7 @@ def predict_cancellation(body: PredictRequest, session: SessionDep) -> Any:
         hour=body.hour,
         day_of_week=body.day_of_week,
         is_peak_hour=is_peak_hour,
+        risk_multiplier=risk_multiplier,
     )
 
     session.add(RidePrediction(
@@ -206,7 +208,7 @@ def predict_cancellation(body: PredictRequest, session: SessionDep) -> Any:
         risk_level=result["risk_level"],
         probability=result["cancel_probability"],
         is_raining=is_raining,
-        weather_conditions=wx.conditions,
+        weather_conditions=wx_impact["weather_condition"],
         cancel_rate=demand_info.cancel_rate,
         demand_score=demand_info.demand_score,
         driver_supply=demand_info.driver_supply,

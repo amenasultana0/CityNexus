@@ -77,10 +77,20 @@ def rule_based_probability(base_cancel_rate: float, hour: int, day_of_week: int,
     return min(prob, 0.95)
 
 
-def hybrid_predict(ml_prob: float, base_cancel_rate: float, hour: int, day_of_week: int, is_peak_hour: bool) -> dict:
+def hybrid_predict(
+    ml_prob: float,
+    base_cancel_rate: float,
+    hour: int,
+    day_of_week: int,
+    is_peak_hour: bool,
+    risk_multiplier: float = 1.0,
+) -> dict:
     """Combine ML probability (40%) with rule-based probability (60%) for final cancellation risk."""
     rule_prob = rule_based_probability(base_cancel_rate, hour, day_of_week, is_peak_hour)
     final_prob = (ml_prob * 0.4) + (rule_prob * 0.6)
+
+    # Apply weather multiplier (capped at 0.95)
+    final_prob = min(final_prob * risk_multiplier, 0.95)
 
     if final_prob >= 0.55:
         risk = "High"
@@ -95,6 +105,7 @@ def hybrid_predict(ml_prob: float, base_cancel_rate: float, hour: int, day_of_we
         "ml_probability": round(ml_prob, 4),
         "rule_probability": round(rule_prob, 4),
         "confidence": round(max(final_prob, 1 - final_prob), 4),
+        "weather_adjusted": risk_multiplier > 1.0,
     }
 
 

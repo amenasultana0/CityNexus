@@ -94,3 +94,54 @@ def get_weather() -> WeatherResult:
             conditions="Unknown (API unavailable)",
             cached=False,
         )
+
+
+def _weathercode_to_impact(code: int) -> tuple[bool, str, float]:
+    """Map WMO weathercode → (is_raining, condition_label, risk_multiplier)."""
+    if code < 3:
+        return False, "clear", 1.0
+    elif code < 60:
+        return False, "cloudy", 1.05
+    elif code < 80:
+        return True, "rain", 1.30
+    else:
+        return True, "heavy_rain", 1.50
+
+
+def get_weather_impact(lat: float, lon: float) -> dict:
+    """
+    Fetch current weather for arbitrary coordinates via Open-Meteo and return
+    a risk-impact dict for use in cancellation prediction.
+
+    Returns:
+        {
+            "is_raining": bool,
+            "weather_condition": str,   # clear | cloudy | rain | heavy_rain
+            "weathercode": int,
+            "risk_multiplier": float    # 1.0 = no change, 1.3 = rain, 1.5 = heavy rain
+        }
+    """
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current_weather=true"
+        "&hourly=precipitation,weathercode"
+        "&forecast_days=1"
+    )
+
+    try:
+        resp = httpx.get(url, timeout=5.0)
+        resp.raise_for_status()
+        cw = resp.json()["current_weather"]
+        code = int(cw["weathercode"])
+    except Exception as exc:
+        logger.warning("get_weather_impact failed (%s) — defaulting to clear.", exc)
+        code = 0
+
+    is_raining, condition, multiplier = _weathercode_to_impact(code)
+    return {
+        "is_raining": is_raining,
+        "weather_condition": condition,
+        "weathercode": code,
+        "risk_multiplier": multiplier,
+    }
