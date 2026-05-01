@@ -228,7 +228,8 @@ def transport_alternatives(
     bus_stop_count = area_ctx.bus_stop_count_1km if area_ctx else 3
 
     all_costs = cost_svc.calculate_all_costs(
-        distance_km, hour, is_raining, day_of_week, passengers
+        distance_km, hour, is_raining, day_of_week, passengers,
+        cancel_rate=demand_info.cancel_rate,
     )
 
     # Metro: unavailable if nearest station > 1.5 km or outside operating hours
