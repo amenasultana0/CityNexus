@@ -1,0 +1,219 @@
+================================================================================
+CITYNEXUS - THREE-ENGINE TRAINING SYSTEM
+================================================================================
+
+================================================================================
+ENGINE 1: XGBoost Cancellation Risk Classifier
+================================================================================
+
+[Step 1] Loading training data...
+Dropping Source_encoded column (data leakage prevention)...
+X_train shape: (122418, 18)
+
+Original class distribution:
+  Low (class 0): 77888 samples (63.62%)
+  Medium (class 1): 11427 samples (9.33%)
+  High (class 2): 33103 samples (27.04%)
+
+[Step 2] Applying SMOTE to balance classes...
+
+Balanced class distribution after SMOTE:
+  Low (class 0): 77888 samples (33.33%)
+  Medium (class 1): 77888 samples (33.33%)
+  High (class 2): 77888 samples (33.33%)
+
+[Step 3] Training XGBoost classifier with balanced params and fine-tuned class weights...
+Computed sample weights for 233664 balanced samples
+Applied 9.5x boost to Medium class, 8.5x boost to High class
+Initial training with aggressive class weights complete.
+
+[Step 4] Evaluating on test set...
+
+Classification Report:
+              precision    recall  f1-score   support
+
+         Low       1.00      1.00      1.00     19563
+      Medium       0.41      0.61      0.49      2871
+        High       0.83      0.70      0.76      8171
+
+    accuracy                           0.88     30605
+   macro avg       0.75      0.77      0.75     30605
+weighted avg       0.90      0.88      0.89     30605
+
+
+Confusion Matrix:
+[[19563     0     0]
+ [    0  1738  1133]
+ [    0  2471  5700]]
+
+Overall Accuracy: 0.8822
+
+Per-Class Recall:
+  Low recall: 1.0000
+  Medium recall: 0.6054
+  High recall: 0.6976
+
+[Step 5] Performance thresholds not met!
+  Medium recall: 0.6054 (threshold: 0.60)
+  High recall: 0.6976 (threshold: 0.75)
+
+Retraining with balanced weights to achieve both Medium>60% and High>75%...
+Applied 10.0x boost to Medium, 9.0x boost to High
+
+Retrained Classification Report:
+              precision    recall  f1-score   support
+
+         Low       1.00      1.00      1.00     19563
+      Medium       0.43      0.57      0.49      2871
+        High       0.83      0.73      0.78      8171
+
+    accuracy                           0.89     30605
+   macro avg       0.75      0.77      0.76     30605
+weighted avg       0.90      0.89      0.89     30605
+
+
+Retrained Confusion Matrix:
+[[19563     0     0]
+ [    0  1633  1238]
+ [    0  2174  5997]]
+
+Retrained Overall Accuracy: 0.8885
+
+Retrained Per-Class Recall:
+  Low recall: 1.0000
+  Medium recall: 0.5688
+  High recall: 0.7339
+
+[Step 6] Validating against Hyderabad calibration data...
+Loaded 25 Hyderabad constituencies for validation.
+
+Risk level distribution in Hyderabad calibration:
+risk_level
+Medium        20
+High           4
+Unreliable     1
+Name: count, dtype: int64
+
+✓ Validation passed: No Low risk zones in Hyderabad (as expected).
+
+[Step 7] Saving trained model...
+Model saved to: model_outputs/cancellation_model.pkl
+
+================================================================================
+ENGINE 2: Demand Pattern Analyzer
+================================================================================
+
+Loading demand patterns data...
+Loaded 14895 demand pattern records.
+
+[Daily Patterns Analysis]
+Filtered for HYD city: 832 records
+
+Average demand level by day of week:
+  Sunday (day 0): 1.0756 (Medium)
+  Friday (day 5): 1.0504 (Medium)
+  Saturday (day 6): 1.0252 (Medium)
+  Tuesday (day 2): 0.9916 (Medium)
+  Monday (day 1): 0.9831 (Medium)
+  Wednesday (day 3): 0.9580 (Medium)
+  Thursday (day 4): 0.9160 (Medium)
+
+Top 3 highest demand days: ['Sunday', 'Friday', 'Saturday']
+Top 3 lowest demand days: ['Monday', 'Wednesday', 'Thursday']
+
+[Hourly Patterns Analysis]
+
+Average demand level by hour:
+  Hour 09: 1.4595 (Medium)
+  Hour 08: 1.4414 (Medium)
+  Hour 18: 1.4054 (Medium)
+  Hour 10: 1.3874 (Medium)
+  Hour 17: 1.3874 (Medium)
+  Hour 16: 1.3694 (Medium)
+  Hour 20: 1.2973 (Medium)
+  Hour 15: 1.2883 (Medium)
+  Hour 19: 1.2883 (Medium)
+  Hour 11: 1.2613 (Medium)
+  Hour 14: 1.2432 (Medium)
+  Hour 12: 1.2252 (Medium)
+  Hour 13: 1.2072 (Medium)
+  Hour 07: 1.1712 (Medium)
+  Hour 21: 1.0676 (Medium)
+  Hour 06: 0.8288 (Medium)
+  Hour 22: 0.8108 (Medium)
+  Hour 23: 0.7297 (Medium)
+  Hour 05: 0.6306 (Medium)
+  Hour 00: 0.4414 (Low)
+  Hour 04: 0.4144 (Low)
+  Hour 01: 0.2973 (Low)
+  Hour 03: 0.1892 (Low)
+  Hour 02: 0.1802 (Low)
+
+Peak hours (top 25%): [8, 9, 10, 16, 17, 18]
+Off-peak hours (bottom 25%): [0, 1, 2, 3, 4, 5]
+
+Demand summary saved to: model_outputs/demand_summary.json
+
+================================================================================
+ENGINE 3: Transport Recommendation Engine
+================================================================================
+
+Loading transport and area context data...
+Loaded 8035 transport stops.
+Loaded 150 ward/area records.
+
+Building BallTree spatial index...
+BallTree built successfully.
+
+[Testing Transport Recommendation Engine]
+
+Test parameters:
+  Location: (17.4435, 78.3772)
+  Ward: Gachibowli
+  Is raining: True
+
+Test 1: Find nearest stops
+  1. tcs (bus_stop) - 0.0 km
+  2. raheja mind space (bus_stop) - 0.17 km
+  3. mind space bus stop (bus_stop) - 0.19 km
+
+Test 2: Get recommendation (High risk, raining, Gachibowli)
+  Note: Ward 'Gachibowli' not found in area_context. Skipping flood check.
+  Risk Level: High
+  Recommendation: High cancellation risk, strongly recommend alternatives
+  Flood Override: False
+  Nearest alternatives:
+    1. tcs (bus_stop) - 0.0 km
+    2. raheja mind space (bus_stop) - 0.17 km
+    3. mind space bus stop (bus_stop) - 0.19 km
+
+================================================================================
+FINAL SUMMARY - CITYNEXUS THREE-ENGINE SYSTEM
+================================================================================
+
+[ENGINE 1: XGBoost Cancellation Risk Classifier]
+  Overall Accuracy: 0.8885
+  Medium Class Recall: 0.5688
+  High Class Recall: 0.7339
+  Auto-retrain Triggered: True
+  Parameters Used: stronger (n_estimators=500, max_depth=8, learning_rate=0.05, subsample=0.8)
+  Model Saved: True → model_outputs/cancellation_model.pkl
+
+[ENGINE 2: Demand Pattern Analyzer]
+  Peak Hours Found: 6 hours
+  Peak Hours: [8, 9, 10, 16, 17, 18]
+  High Demand Days Found: 3 days
+  High Demand Days: ['Sunday', 'Friday', 'Saturday']
+  Summary JSON Saved: True → model_outputs/demand_summary.json
+
+[ENGINE 3: Transport Recommendation Engine]
+  BallTree Built: True
+  Test Location: (17.4435, 78.3772) (Gachibowli)
+  Test Prediction (with rain):
+    Risk Level: High
+    Recommendation: High cancellation risk, strongly recommend alternatives
+    Flood Override Applied: False
+
+================================================================================
+ALL ENGINES SUCCESSFULLY BUILT AND TESTED
+================================================================================
