@@ -5,7 +5,7 @@ Single endpoint, no auth required.
 
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.services import weather as weather_svc
@@ -28,13 +28,10 @@ class WeatherImpactResponse(BaseModel):
 
 
 @router.get("/impact", response_model=WeatherImpactResponse)
-def weather_impact(
-    lat: float = Query(default=17.385, description="Latitude (defaults to Hyderabad centre)"),
-    lon: float = Query(default=78.486, description="Longitude (defaults to Hyderabad centre)"),
-) -> Any:
+def weather_impact() -> Any:
     """
-    Return current weather and its effect on ride availability and pricing.
-    Accepts lat/lon for location-specific lookup (Open-Meteo, 15-min cache).
+    Return current Hyderabad weather and its effect on ride availability and pricing.
+    Uses a 15-minute cache. Coordinates are fixed to Hyderabad city centre.
     """
     wx = weather_svc.get_weather()
 
