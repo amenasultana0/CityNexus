@@ -364,7 +364,7 @@ function Dashboard() {
     const riskOrder: Record<string, number> = { low: 0, moderate: 1, high: 2 }
     const maxCost = Math.max(...available.map((o) => o.cost_inr), 1)
     const maxTime = Math.max(...available.map((o) => o.time_min), 1)
-    return available.sort((a, b) => {
+    return [...available].sort((a, b) => {
       const score = (o: typeof a) => {
         const r = (riskOrder[o.risk_level] ?? 1) / 2
         const c = o.cost_inr / maxCost
@@ -956,22 +956,31 @@ function Dashboard() {
                   <ErrorCard message="Could not load data — check backend connection" onRetry={() => alternativesQuery.refetch()} />
                 ) : alternativesQuery.data ? (
                   <VStack gap={0} align="stretch">
-                    {alternativesQuery.data.options
-                      .filter((o) => o.available)
-                      .map((opt, i, arr) => {
+                    {(() => {
+                      const allOptions = alternativesQuery.data.options
+                      const sorted = [...allOptions].sort((a, b) => {
+                        if (a === bestOption) return -1
+                        if (b === bestOption) return 1
+                        if (a.available && !b.available) return -1
+                        if (!a.available && b.available) return 1
+                        return a.cost_inr - b.cost_inr
+                      })
+                      return sorted.map((opt, i) => {
                         const isBest = opt === bestOption
-                        const isHighRisk = opt.risk_level === "high"
+                        const isUnavailable = !opt.available
+                        const isHighRisk = opt.risk_level === "high" && !isUnavailable
                         const color = modeColor(opt.mode)
-                        const isLast = i === arr.length - 1
+                        const isLast = i === sorted.length - 1
                         return (
                           <Box
                             key={i}
                             px={3}
                             py={3}
                             borderBottom={isLast ? "none" : `1px solid ${INPUT_BG}`}
-                            borderRadius={isBest ? "10px" : "0"}
+                            borderLeft={isBest ? "4px solid #16a34a" : "4px solid transparent"}
                             bg={isBest ? "#f0fdf4" : "transparent"}
-                            _hover={{ bg: INPUT_BG }}
+                            opacity={isUnavailable ? 0.45 : 1}
+                            _hover={{ bg: isUnavailable ? "transparent" : INPUT_BG }}
                             transition="background 0.15s ease"
                           >
                             <Flex align="center" gap={4}>
@@ -992,7 +1001,7 @@ function Dashboard() {
                               {/* Name + badges */}
                               <Box flex="1">
                                 <Flex align="center" gap={2} mb={0.5} flexWrap="wrap">
-                                  <Text fontWeight="600" color={PRIMARY} textTransform="capitalize" fontSize="sm">
+                                  <Text fontWeight="600" color={isUnavailable ? MUTED : PRIMARY} textTransform="capitalize" fontSize="sm">
                                     {opt.vehicles_needed > 1 ? `${opt.vehicles_needed} × ` : ""}
                                     {opt.mode}
                                     {opt.variant ? ` · ${opt.variant}` : ""}
@@ -1010,10 +1019,26 @@ function Dashboard() {
                                       textTransform="uppercase"
                                       letterSpacing="0.04em"
                                     >
-                                      Recommended
+                                      RECOMMENDED
                                     </Box>
                                   )}
-                                  {isHighRisk && !isBest && (
+                                  {isUnavailable && (
+                                    <Box
+                                      display="inline-block"
+                                      px={2}
+                                      py={0.5}
+                                      borderRadius="full"
+                                      bg="#f1f5f9"
+                                      color={MUTED}
+                                      fontSize="0.62rem"
+                                      fontWeight="700"
+                                      textTransform="uppercase"
+                                      letterSpacing="0.04em"
+                                    >
+                                      Not Available
+                                    </Box>
+                                  )}
+                                  {isHighRisk && (
                                     <Box
                                       display="inline-block"
                                       px={2}
@@ -1029,7 +1054,7 @@ function Dashboard() {
                                       High Risk
                                     </Box>
                                   )}
-                                  {opt.vehicles_needed > 1 && (
+                                  {opt.vehicles_needed > 1 && !isUnavailable && (
                                     <Badge colorPalette="orange" size="sm">
                                       {opt.vehicles_needed} vehicles
                                     </Badge>
@@ -1039,7 +1064,7 @@ function Dashboard() {
                               </Box>
                               {/* Price + time */}
                               <Box textAlign="right" flexShrink={0}>
-                                <Text fontWeight="700" fontSize="md" color={PRIMARY}>
+                                <Text fontWeight="700" fontSize="md" color={isUnavailable ? MUTED : PRIMARY}>
                                   ₹{Math.round(opt.cost_inr)}
                                 </Text>
                                 <Text fontSize="xs" color={MUTED}>
@@ -1049,7 +1074,8 @@ function Dashboard() {
                             </Flex>
                           </Box>
                         )
-                      })}
+                      })
+                    })()}
                   </VStack>
                 ) : null}
               </Card>
