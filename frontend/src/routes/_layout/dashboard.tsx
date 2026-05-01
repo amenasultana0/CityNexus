@@ -44,6 +44,32 @@ import {
   predictCancellation,
 } from "@/lib/api"
 
+function ErrorCard({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <Box
+      bg="#f8f9fa"
+      border={`1px solid ${BORDER}`}
+      borderRadius="10px"
+      p={4}
+      textAlign="center"
+    >
+      <Text color={MUTED} fontSize="sm" mb={onRetry ? 2 : 0}>
+        {message}
+      </Text>
+      {onRetry && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRetry}
+          style={{ borderColor: BORDER, color: MUTED, marginTop: "4px" }}
+        >
+          Retry
+        </Button>
+      )}
+    </Box>
+  )
+}
+
 export const Route = createFileRoute("/_layout/dashboard")({
   component: Dashboard,
 })
@@ -124,7 +150,7 @@ function getRiskColorPalette(level: string) {
 
 function WeatherIcon({ data }: { data: WeatherImpactResponse }) {
   if (data.is_raining) return <Text fontSize="3xl">🌧️</Text>
-  if (data.temperature_c > 35) return <Text fontSize="3xl">🌡️</Text>
+  if (data.temperature_c !== undefined && data.temperature_c > 35) return <Text fontSize="3xl">🌡️</Text>
   return <Text fontSize="3xl">☀️</Text>
 }
 
@@ -232,8 +258,8 @@ function Dashboard() {
   }
 
   const weatherQuery = useQuery({
-    queryKey: ["weather"],
-    queryFn: getWeatherImpact,
+    queryKey: ["weather", formData?.originLat, formData?.originLon],
+    queryFn: () => getWeatherImpact(formData?.originLat, formData?.originLon),
     staleTime: 15 * 60 * 1000,
   })
 
@@ -246,6 +272,7 @@ function Dashboard() {
         origin_lon: fd.originLon,
         dest_lat: fd.destLat,
         dest_lon: fd.destLon,
+        passengers: fd.passengers,
         hour: fd.hour,
         day_of_week: fd.dayOfWeek,
         month: fd.month,
@@ -528,6 +555,8 @@ function Dashboard() {
                   <CardLabel>Cancellation Risk</CardLabel>
                   {predictionQuery.isLoading ? (
                     <Skeleton h="40px" />
+                  ) : predictionQuery.isError ? (
+                    <ErrorCard message="Could not load — check backend" onRetry={() => predictionQuery.refetch()} />
                   ) : predictionQuery.data ? (
                     <>
                       <Text
@@ -558,6 +587,8 @@ function Dashboard() {
                   <CardLabel>Real Wait Time</CardLabel>
                   {reliabilityQuery.isLoading ? (
                     <Skeleton h="40px" />
+                  ) : reliabilityQuery.isError ? (
+                    <ErrorCard message="Could not load — check backend" onRetry={() => reliabilityQuery.refetch()} />
                   ) : reliabilityQuery.data ? (
                     <>
                       <Text
@@ -588,6 +619,8 @@ function Dashboard() {
                   <CardLabel>Best Mode Now</CardLabel>
                   {alternativesQuery.isLoading ? (
                     <Skeleton h="40px" />
+                  ) : alternativesQuery.isError ? (
+                    <ErrorCard message="Could not load — check backend" onRetry={() => alternativesQuery.refetch()} />
                   ) : bestOption ? (
                     <>
                       <Text
@@ -619,6 +652,8 @@ function Dashboard() {
                   <CardLabel>Weather Impact</CardLabel>
                   {weatherQuery.isLoading ? (
                     <Skeleton h="40px" />
+                  ) : weatherQuery.isError ? (
+                    <ErrorCard message="Could not load weather" onRetry={() => weatherQuery.refetch()} />
                   ) : weatherQuery.data ? (
                     <>
                       <Text
@@ -628,10 +663,14 @@ function Dashboard() {
                         lineHeight="1"
                         mb={1}
                       >
-                        {weatherQuery.data.conditions.split(" ")[0]}
+                        {weatherQuery.data.conditions
+                          ? weatherQuery.data.conditions.split(" ")[0]
+                          : weatherQuery.data.is_raining ? "Raining" : "Clear"}
                       </Text>
                       <Text fontSize="0.78rem" color={SUBTLE}>
-                        {weatherQuery.data.temperature_c}°C · {weatherQuery.data.windspeed_kmh} km/h
+                        {weatherQuery.data.temperature_c
+                          ? `${weatherQuery.data.temperature_c}°C · ${weatherQuery.data.windspeed_kmh} km/h`
+                          : weatherQuery.data.is_raining ? "Rain affecting rides" : "Normal conditions"}
                       </Text>
                     </>
                   ) : (
@@ -719,6 +758,8 @@ function Dashboard() {
                   <CardLabel>Cancellation Risk — Detail</CardLabel>
                   {predictionQuery.isLoading ? (
                     <Skeleton h="140px" />
+                  ) : predictionQuery.isError ? (
+                    <ErrorCard message="Could not load data — check backend connection" onRetry={() => predictionQuery.refetch()} />
                   ) : predictionQuery.data ? (
                     <>
                       <Flex align="center" gap={4} mb={4}>
@@ -786,6 +827,8 @@ function Dashboard() {
                   <CardLabel>Weather Conditions</CardLabel>
                   {weatherQuery.isLoading ? (
                     <Skeleton h="140px" />
+                  ) : weatherQuery.isError ? (
+                    <ErrorCard message="Could not load data — check backend connection" onRetry={() => weatherQuery.refetch()} />
                   ) : weatherQuery.data ? (
                     <>
                       <Flex align="center" gap={3} mb={3}>
@@ -823,6 +866,8 @@ function Dashboard() {
                   <CardLabel>Route Reliability</CardLabel>
                   {reliabilityQuery.isLoading ? (
                     <Skeleton h="140px" />
+                  ) : reliabilityQuery.isError ? (
+                    <ErrorCard message="Could not load data — check backend connection" onRetry={() => reliabilityQuery.refetch()} />
                   ) : reliabilityQuery.data ? (
                     <>
                       <Flex align="end" gap={2} mb={4}>
@@ -907,6 +952,8 @@ function Dashboard() {
                     <Skeleton h="64px" />
                     <Skeleton h="64px" />
                   </VStack>
+                ) : alternativesQuery.isError ? (
+                  <ErrorCard message="Could not load data — check backend connection" onRetry={() => alternativesQuery.refetch()} />
                 ) : alternativesQuery.data ? (
                   <VStack gap={0} align="stretch">
                     {alternativesQuery.data.options
@@ -1012,6 +1059,8 @@ function Dashboard() {
                 <CardLabel>Cost Breakdown</CardLabel>
                 {costQuery.isLoading ? (
                   <Skeleton h="200px" />
+                ) : costQuery.isError ? (
+                  <ErrorCard message="Could not load data — check backend connection" onRetry={() => costQuery.refetch()} />
                 ) : costQuery.data ? (
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart
@@ -1053,6 +1102,8 @@ function Dashboard() {
                 <CardLabel>Best Time to Leave</CardLabel>
                 {bestTimeQuery.isLoading ? (
                   <Skeleton h="80px" />
+                ) : bestTimeQuery.isError ? (
+                  <ErrorCard message="Could not load data — check backend connection" onRetry={() => bestTimeQuery.refetch()} />
                 ) : bestTimeQuery.data ? (
                   <>
                     <Flex gap={2} mb={4} wrap="wrap">
@@ -1102,6 +1153,8 @@ function Dashboard() {
                 <CardLabel>Nearest Transit Stops</CardLabel>
                 {pickupQuery.isLoading ? (
                   <Skeleton h="120px" />
+                ) : pickupQuery.isError ? (
+                  <ErrorCard message="Could not load data — check backend connection" onRetry={() => pickupQuery.refetch()} />
                 ) : pickupQuery.data?.suggestions.length ? (
                   <VStack gap={2} align="stretch">
                     {pickupQuery.data.suggestions.slice(0, 5).map((stop, i) => (

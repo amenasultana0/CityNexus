@@ -16,10 +16,65 @@ export interface PredictRequest {
   origin_lon: number
   dest_lat: number
   dest_lon: number
+  passengers?: number
   hour: number
   day_of_week: number
   month: number
   override_rain?: boolean
+}
+
+// ─── New simplified interfaces (task spec) ────────────────────────────────────
+
+export interface WeatherResponse {
+  is_raining: boolean
+  weather_condition: string
+  weathercode: number
+  risk_multiplier: number
+}
+
+export interface TransportAlternative {
+  mode: string
+  cost: number
+  time_minutes: number
+  risk_level: string
+  recommended: boolean
+  description: string
+}
+
+export interface BestTimeSlot {
+  hour: number
+  cancel_probability: number
+  risk_level: string
+  recommended: boolean
+}
+
+export interface RouteReliability {
+  score: number
+  cancellation_rate: number
+  avg_wait: number
+  driver_supply: number
+}
+
+export interface OptimalPickup {
+  name: string
+  zone_type: string
+  distance_km: number
+  latitude: number
+  longitude: number
+}
+
+export interface WeeklyPlanDay {
+  day_name: string
+  recommended_mode: string
+  cost: number
+  risk_level: string
+  reason: string
+}
+
+export interface GeocodedLocation {
+  lat: number
+  lon: number
+  display_name: string
 }
 
 export interface PredictResponse {
@@ -213,8 +268,9 @@ export const getOptimalPickup = async (payload: {
   return data
 }
 
-export const getWeatherImpact = async (): Promise<WeatherImpactResponse> => {
-  const { data } = await api.get("/api/v1/weather/impact")
+export const getWeatherImpact = async (lat?: number, lon?: number): Promise<WeatherImpactResponse> => {
+  const params = lat !== undefined && lon !== undefined ? { lat, lon } : {}
+  const { data } = await api.get("/api/v1/weather/impact", { params })
   return data
 }
 
@@ -226,6 +282,24 @@ export const getWeeklyPlan = async (
 }
 
 // ─── Geocoding (Nominatim) ────────────────────────────────────────────────────
+
+export const geocodeLocation = async (query: string): Promise<GeocodedLocation | null> => {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Hyderabad')}&format=json&limit=1`,
+      { headers: { "User-Agent": "CityNexus/1.0" } },
+    )
+    const data = await response.json()
+    if (!data || data.length === 0) return null
+    return {
+      lat: parseFloat(data[0].lat),
+      lon: parseFloat(data[0].lon),
+      display_name: data[0].display_name,
+    }
+  } catch {
+    return null
+  }
+}
 
 export const geocode = async (
   locationName: string,

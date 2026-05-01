@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import items, login, private, rides, users, utils
+from app.api.routes import items, login, private, rides, users, utils, weather_routes
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -9,6 +9,7 @@ api_router.include_router(users.router)
 api_router.include_router(utils.router)
 api_router.include_router(items.router)
 api_router.include_router(rides.router, prefix="/rides")
+api_router.include_router(weather_routes.router, prefix="/weather")
 
 
 if settings.ENVIRONMENT == "local":

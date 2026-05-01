@@ -214,6 +214,21 @@ function WeeklyPage() {
             <Skeleton h="300px" />
             <Skeleton h="200px" />
           </VStack>
+        ) : weeklyQuery.isError ? (
+          <Box
+            bg="bg.subtle"
+            borderRadius="xl"
+            p={10}
+            borderWidth="1px"
+            textAlign="center"
+          >
+            <Text color="gray.500" mb={3}>
+              Could not load data — check backend connection
+            </Text>
+            <Button size="sm" variant="outline" onClick={() => weeklyQuery.refetch()}>
+              Retry
+            </Button>
+          </Box>
         ) : plan ? (
           <>
             {/* ── Summary Banner ── */}
