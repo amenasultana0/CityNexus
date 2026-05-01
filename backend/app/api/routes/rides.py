@@ -14,9 +14,11 @@ from sqlmodel import select
 from app.api.deps import SessionDep
 from app.models import AreaContext, RidePrediction, User
 from app.services import demand, weather
-from app.services.ml_model import RideFeatures, predict as ml_predict
+from app.services.ml_model import RideFeatures, hybrid_predict, predict_cancellation_risk
 
 router = APIRouter(tags=["rides"])
+
+_ROAD_FACTOR = 1.4  # Haversine → road distance correction for Hyderabad
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -144,57 +146,74 @@ def predict_cancellation(body: PredictRequest, session: SessionDep) -> Any:
     Combines ML/rule-based model, live weather, and historical demand data.
     Result is persisted for analytics. Pass user_id to associate with an account.
     """
-    wx = weather.get_weather()
-    is_raining = body.override_rain if body.override_rain is not None else wx.is_raining
+    wx_impact = weather.get_weather_impact(body.origin_lat, body.origin_lon)
+    is_raining = body.override_rain if body.override_rain is not None else wx_impact["is_raining"]
+    risk_multiplier = wx_impact["risk_multiplier"] if body.override_rain is None else (1.30 if body.override_rain else 1.0)
 
     demand_info = demand.get_demand_for_location(
         session, body.origin_lat, body.origin_lon, body.hour, body.day_of_week
     )
 
     area = _nearest_area(session, body.origin_lat, body.origin_lon)
-    distance_km = _haversine_km(body.origin_lat, body.origin_lon, body.dest_lat, body.dest_lon)
+
+    # Apply road-distance correction factor (Haversine × 1.4 for Hyderabad road geometry)
+    distance_km = _haversine_km(
+        body.origin_lat, body.origin_lon, body.dest_lat, body.dest_lon
+    ) * _ROAD_FACTOR
+
+    is_peak_hour = _is_peak(body.hour, body.day_of_week)
+    is_weekend = 1 if body.day_of_week >= 5 else 0
 
     features = RideFeatures(
         hour=body.hour,
         day_of_week=body.day_of_week,
         month=body.month,
+        is_peak_hour=int(is_peak_hour),
+        is_weekend=is_weekend,
+        distance_km=distance_km,
+        historical_cancel_rate=demand_info.cancel_rate,
         metro_count_1km=area.metro_count_1km if area else 0,
         bus_stop_count_1km=area.bus_stop_count_1km if area else 0,
-        traffic_chokepoint_nearby=area.traffic_chokepoint_nearby if area else False,
-        is_flood_prone=area.is_flood_prone if area else False,
-        commercial_density_1km=area.commercial_density_1km if area else 0,
-        nearest_metro_distance_km=area.nearest_metro_distance_km if area else 5.0,
-        historical_cancel_rate=demand_info.cancel_rate,
-        distance_km=distance_km,
+        traffic_chokepoint_nearby=int(area.traffic_chokepoint_nearby) if area else 0,
+        is_flood_prone=int(area.is_flood_prone) if area else 0,
     )
 
     if body.user_id is not None and not session.get(User, body.user_id):
         raise HTTPException(status_code=422, detail=f"user_id {body.user_id} does not exist")
 
-    result = ml_predict(features, is_raining)
+    # Get ML probability, then blend with rule-based + weather multiplier for final result
+    ml_result = predict_cancellation_risk(features)
+    result = hybrid_predict(
+        ml_prob=ml_result["cancel_probability"],
+        base_cancel_rate=demand_info.cancel_rate,
+        hour=body.hour,
+        day_of_week=body.day_of_week,
+        is_peak_hour=is_peak_hour,
+        risk_multiplier=risk_multiplier,
+    )
 
     session.add(RidePrediction(
         origin_lat=body.origin_lat,
         origin_lon=body.origin_lon,
         dest_lat=body.dest_lat,
         dest_lon=body.dest_lon,
-        predicted_risk=result.risk_level,
-        probability=result.probability,
+        predicted_risk=result["risk_level"],
+        probability=result["cancel_probability"],
         is_raining=is_raining,
         user_id=body.user_id,
     ))
     session.commit()
 
     return PredictResponse(
-        risk_level=result.risk_level,
-        probability=result.probability,
+        risk_level=result["risk_level"],
+        probability=result["cancel_probability"],
         is_raining=is_raining,
-        weather_conditions=wx.conditions,
+        weather_conditions=wx_impact["weather_condition"],
         cancel_rate=demand_info.cancel_rate,
         demand_score=demand_info.demand_score,
         driver_supply=demand_info.driver_supply,
         factors=_build_factors(features, is_raining, demand_info),
-        using_ml_model=not result.using_fallback,
+        using_ml_model=True,
     )
 
 

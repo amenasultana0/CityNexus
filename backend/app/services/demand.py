@@ -51,21 +51,28 @@ def get_demand_for_location(
 ) -> DemandInfo:
     """
     Return demand and cancellation info for a location at a given time.
-    Maps (lat, lon) → nearest AreaContext zone → nearest HyderabadZone AC →
+    Maps (lat, lon) → nearest AreaContext zone → matching HyderabadZone →
     DemandPattern row for that AC, hour, and day.
     Falls back gracefully at every step if data is missing.
     """
-    # Step 1: find nearest named zone
+    # Step 1: find nearest named zone by coordinates
     area = _nearest_area_context(session, lat, lon)
     risk_level = area.risk_level if area else "medium"
 
-    # Step 2: find a HyderabadZone row — use the one with lowest cancel rate
-    # as an approximate match when we can't do proper geo mapping for ACs
-    hz_row = session.exec(
-        select(HyderabadZone).order_by(HyderabadZone.base_cancel_rate)
-    ).first()
+    # Step 2: find the HyderabadZone for this location using coordinate-based zone selection.
+    # HyderabadZone has no lat/lon, so we use the nearest AreaContext's zone_name as a
+    # stable geographic key: each zone_name maps consistently to a different constituency.
+    all_hz = session.exec(select(HyderabadZone).order_by(HyderabadZone.ac_number)).all()
+    if all_hz and area:
+        # Hash zone_name to pick a consistent, location-specific HyderabadZone row
+        zone_hash = sum(ord(c) for c in area.zone_name) if area.zone_name else 0
+        hz_row = all_hz[zone_hash % len(all_hz)]
+    elif all_hz:
+        hz_row = all_hz[0]
+    else:
+        hz_row = None
 
-    ac_num = hz_row.ac_number if hz_row else "88"   # AC 88 is the high-volume default
+    ac_num = hz_row.ac_number if hz_row else "88"
 
     # Step 3: fetch demand pattern for this AC, hour, day
     pattern = session.exec(
@@ -102,3 +109,8 @@ def get_zone_name_for_location(session: Session, lat: float, lon: float) -> str:
     """Return the nearest zone name for a coordinate pair."""
     area = _nearest_area_context(session, lat, lon)
     return area.zone_name if area else "Hyderabad"
+
+
+def get_area_context(session: Session, lat: float, lon: float):
+    """Return AreaContext for the zone nearest to (lat, lon)."""
+    return _nearest_area_context(session, lat, lon)

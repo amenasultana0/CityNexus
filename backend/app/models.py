@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
@@ -114,11 +115,8 @@ class NewPassword(SQLModel):
 
 
 # ─────────────────────────────────────────────────────────────
-# CityNexus Models — DO NOT modify models above this line
+# CityNexus Models
 # ─────────────────────────────────────────────────────────────
-
-from datetime import datetime, timezone  # noqa: E402
-
 
 class TransportStop(SQLModel, table=True):
     """Metro, MMTS, and bus stops across Hyderabad."""
@@ -131,7 +129,7 @@ class TransportStop(SQLModel, table=True):
 
 
 class AreaContext(SQLModel, table=True):
-    """GIS features for the 15 operational Hyderabad zones."""
+    """GIS features for the operational Hyderabad zones."""
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     zone_name: str = Field(unique=True, index=True, max_length=100)
     latitude: float
@@ -178,7 +176,7 @@ class RidePrediction(SQLModel, table=True):
     origin_lon: float
     dest_lat: float
     dest_lon: float
-    predicted_risk: str = Field(max_length=20)   # medium | high
+    predicted_risk: str = Field(max_length=20)
     probability: float
     is_raining: bool = False
     created_at: datetime = Field(
