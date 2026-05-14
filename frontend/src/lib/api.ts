@@ -136,6 +136,8 @@ export interface PickupSuggestion {
   distance_m: number
   walk_min: number
   risk_reduction_pct: number
+  lat: number
+  lon: number
 }
 
 export interface OptimalPickupResponse {
@@ -320,4 +322,115 @@ export const geocode = async (
   }
   const result = response.data[0]
   return { lat: parseFloat(result.lat), lon: parseFloat(result.lon) }
+
+}
+// -------------------------
+// Heatmap shared route state
+// -------------------------
+
+export interface SavedRoute {
+  pickup: string
+  destination: string
+}
+
+const ROUTE_STORAGE_KEY = "citynexus_route"
+
+export function saveRoute(
+  pickup: string,
+  destination: string,
+) {
+  localStorage.setItem(
+    ROUTE_STORAGE_KEY,
+    JSON.stringify({
+      pickup,
+      destination,
+    }),
+  )
+}
+
+export function getSavedRoute():
+  | SavedRoute
+  | null {
+  const raw =
+    localStorage.getItem(
+      ROUTE_STORAGE_KEY,
+    )
+
+  if (!raw) return null
+
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+// -------------------------
+// Google place geocode
+// -------------------------
+
+export async function geocodeGoogle(
+  address: string,
+) {
+  const key =
+    import.meta.env
+      .VITE_GOOGLE_MAPS_KEY
+
+  const url =
+    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+      address,
+    )}&key=${key}`
+
+  const res = await fetch(url)
+
+  if (!res.ok) {
+    throw new Error(
+      "Failed to geocode",
+    )
+  }
+
+  const data = await res.json()
+
+  if (
+    !data.results ||
+    !data.results.length
+  ) {
+    throw new Error(
+      "Location not found",
+    )
+  }
+
+  const result =
+    data.results[0]
+
+  return {
+    lat:
+      result.geometry.location
+        .lat,
+    lon:
+      result.geometry.location
+        .lng,
+    fullAddress:
+      result.formatted_address,
+  }
+}
+export async function getNearbyTransitStops(
+  lat: number,
+  lon: number,
+) {
+  const response =
+    await getOptimalPickup({
+      origin_lat: lat,
+      origin_lon: lon,
+      radius_m: 2500,
+    })
+
+  return response.suggestions.filter(
+    (stop) =>
+      stop.stop_type ===
+        "metro" ||
+      stop.stop_type ===
+        "bus" ||
+      stop.stop_type ===
+        "mmts",
+  )
 }

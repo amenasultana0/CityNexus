@@ -43,6 +43,9 @@ import {
   getWeatherImpact,
   predictCancellation,
 } from "@/lib/api"
+import {
+  saveRoute,
+} from "@/lib/api"
 
 function ErrorCard({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
@@ -240,6 +243,22 @@ function Dashboard() {
       const now = new Date()
       const jsDay = now.getDay()
       const dow = jsDay === 0 ? 6 : jsDay - 1
+     
+      localStorage.setItem(
+        "tripData",
+        JSON.stringify({
+          pickupText,
+          destText,
+          pickupLat: pickup.lat,
+          pickupLng: pickup.lon,
+          destLat: dest.lat,
+          destLng: dest.lon,
+        })
+      )
+      saveRoute(
+       pickupText,
+        destText,
+      )
       setFormData({
         originLat: pickup.lat,
         originLon: pickup.lon,
