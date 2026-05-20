@@ -1,6 +1,10 @@
 """
 Transport API — alternatives, optimal pickup point, journey cost breakdown.
 All endpoints are public (no auth required).
+
+Distance sourced from Google Routes API (real road km) via routes_service.
+Cost responses include min/max range fields and display string.
+Surge is additive and capped at 1.5x — see cost.py for full surge logic.
 """
 
 from datetime import datetime
@@ -15,6 +19,7 @@ from app.services import demand as demand_svc
 from app.services import transport as transport_svc
 from app.services import weather as weather_svc
 from app.services.cost import haversine_km, bus_wait_min, travel_only_min
+from app.services.routes_service import get_road_distance
 
 router = APIRouter(tags=["transport"])
 
@@ -31,8 +36,8 @@ class TimeBreakdown(BaseModel):
     wait_min: int
     walk_min: int
     total_min: int
-    label: str               # "42 mins (25 travel + 10 wait + 7 walk)"
-    frequency_label: str | None = None  # "Every 10-15 mins"
+    label: str
+    frequency_label: str | None = None
 
 
 class TransportOption(BaseModel):
@@ -40,9 +45,12 @@ class TransportOption(BaseModel):
     variant: str | None
     time_min: int
     cost_inr: float
+    cost_min_inr: float
+    cost_max_inr: float
+    cost_display: str
     surge_multiplier: float
     risk_level: str
-    reliability_score: int      # 1–10
+    reliability_score: int
     available: bool
     reason: str
     vehicles_needed: int = 1
@@ -75,6 +83,9 @@ class CostEntry(BaseModel):
     base_cost_inr: float
     surge_multiplier: float
     final_cost_inr: float
+    cost_min_inr: float
+    cost_max_inr: float
+    cost_display: str
     time_min: int
     available: bool
 
@@ -82,6 +93,7 @@ class CostEntry(BaseModel):
 class JourneyCostResponse(BaseModel):
     distance_km: float
     is_raining: bool
+    precipitation_mm: float
     costs: list[CostEntry]
 
 
@@ -92,15 +104,9 @@ def _reliability_score(cancel_rate: float) -> int:
 
 
 def _bus_reliability_score(bus_stop_count: int, hour: int, day_of_week: int) -> int:
-    """
-    Bus reliability: 3–6 based on stop density.
-    Dense areas score flat 6 — peak adds frequency but also crowd/delays, net neutral.
-    Moderate area scores 5 peak / 4 off-peak (fewer buses but less chaos).
-    Sparse area always 3.
-    """
     is_peak = hour in {7, 8, 9, 17, 18, 19, 20} and day_of_week < 5
     if bus_stop_count >= 5:
-        return 6   # dense: peak adds buses but also crowd — flat score
+        return 6
     if bus_stop_count >= 2:
         return 5 if is_peak else 4
     return 3
@@ -129,7 +135,6 @@ def _reason(mode: str, option: Any, risk_level: str, hour: int = 9, day_of_week:
 
 
 def _is_metro_operating(hour: int) -> bool:
-    """Hyderabad Metro operates 6:00 am – 11:00 pm."""
     return 6 <= hour <= 22
 
 
@@ -166,33 +171,25 @@ def _mode_wait_min(mode: str, risk_level: str, hour: int, day_of_week: int, bus_
 
 
 def _build_time_breakdown(
-    mode: str,
-    variant: str | None,
-    distance_km: float,
-    hour: int,
-    day_of_week: int,
-    risk_level: str,
-    board_walk_m: int = 0,
-    alight_walk_m: int = 0,
-    bus_stop_count: int = 3,
+    mode: str, variant: str | None, distance_km: float,
+    hour: int, day_of_week: int, risk_level: str,
+    board_walk_m: int = 0, alight_walk_m: int = 0, bus_stop_count: int = 3,
 ) -> TimeBreakdown:
     mode_key = f"cab_{variant}" if mode == "cab" and variant else mode
     travel = travel_only_min(mode_key, distance_km, hour)
     wait = _mode_wait_min(mode, risk_level, hour, day_of_week, bus_stop_count)
     walk = max(1, round((board_walk_m + alight_walk_m) / 80)) if (board_walk_m or alight_walk_m) else 0
     total = travel + wait + walk
-
-    if walk > 0:
-        label = f"{total} mins ({travel} travel + {wait} wait + {walk} walk)"
-    else:
-        label = f"{total} mins ({travel} travel + {wait} wait)"
-
+    label = (
+        f"{total} mins ({travel} travel + {wait} wait + {walk} walk)"
+        if walk > 0
+        else f"{total} mins ({travel} travel + {wait} wait)"
+    )
     freq_label: str | None = None
     if mode == "metro":
         freq_label = "Every 5-10 mins"
     elif mode == "bus":
         freq_label = _bus_frequency_label(bus_stop_count, hour, day_of_week)
-
     return TimeBreakdown(
         travel_min=travel, wait_min=wait, walk_min=walk,
         total_min=total, label=label, frequency_label=freq_label,
@@ -212,39 +209,39 @@ def transport_alternatives(
     hour: int = Query(..., ge=0, le=23),
     day_of_week: int = Query(..., ge=0, le=6),
     is_raining: bool = Query(default=False),
+    is_festival: bool = Query(default=False),
 ) -> Any:
-    """
-    Return cost and time estimates for all transport modes between two coordinates.
-    """
-    distance_km = haversine_km(origin_lat, origin_lon, dest_lat, dest_lon)
+    # Real road distance
+    distance_km, _ = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
+
+    # Weather — get precipitation_mm for surge logic
+    wx = weather_svc.get_weather()
 
     demand_info = demand_svc.get_demand_for_location(
         session, origin_lat, origin_lon, hour, day_of_week
     )
     rel_score = _reliability_score(demand_info.cancel_rate)
 
-    # Bus stop density for frequency estimation
     area_ctx = demand_svc.get_area_context(session, origin_lat, origin_lon)
     bus_stop_count = area_ctx.bus_stop_count_1km if area_ctx else 3
 
     all_costs = cost_svc.calculate_all_costs(
-        distance_km, hour, is_raining, day_of_week, passengers,
+        distance_km, hour, wx.is_raining, day_of_week, passengers,
         cancel_rate=demand_info.cancel_rate,
+        precipitation_mm=wx.precipitation_mm,
+        is_festival=is_festival,
     )
 
-    # Metro: unavailable if nearest station > 1.5 km or outside operating hours
     metro_nearby = transport_svc.find_nearest_stops(
         session, origin_lat, origin_lon, stop_type="metro", radius_km=1.5, max_count=1
     )
     metro_accessible = len(metro_nearby) > 0
 
-    # Bus: unavailable if no stop within 1 km
     bus_nearby = transport_svc.find_nearest_stops(
         session, origin_lat, origin_lon, stop_type="bus", radius_km=1.0, max_count=1
     )
     bus_accessible = len(bus_nearby) > 0
 
-    # Boarding/alighting stop details
     metro_board = transport_svc.nearest_stop_of_type(session, origin_lat, origin_lon, "metro")
     metro_alight = transport_svc.nearest_stop_of_type(session, dest_lat, dest_lon, "metro")
     bus_board = transport_svc.nearest_stop_of_type(session, origin_lat, origin_lon, "bus")
@@ -255,11 +252,10 @@ def transport_alternatives(
         if c.mode == "metro":
             mode_risk = "low"
         elif c.mode == "bus":
-            mode_risk = "moderate"   # schedule-based, not cancel-prone, but unreliable waits
+            mode_risk = "moderate"
         else:
             mode_risk = demand_info.risk_level
 
-        # Walk distances for transit modes
         board_walk_m = 0
         alight_walk_m = 0
         if c.mode == "metro":
@@ -276,7 +272,6 @@ def transport_alternatives(
             bus_stop_count=bus_stop_count,
         )
 
-        # Stop details card info
         stop_details: StopDetails | None = None
         if c.mode == "metro" and metro_board and metro_alight:
             stop_details = StopDetails(
@@ -289,7 +284,6 @@ def transport_alternatives(
                 alight_at=f"{bus_alight.name} ({bus_alight.distance_m}m walk)",
             )
 
-        # Availability checks
         if c.mode == "metro" and not metro_accessible:
             available, reason = False, "No metro station within 1.5 km"
         elif c.mode == "metro" and not _is_metro_operating(hour):
@@ -303,10 +297,12 @@ def transport_alternatives(
             reason = _reason(c.mode, c, demand_info.risk_level, hour, day_of_week)
 
         options.append(TransportOption(
-            mode=c.mode,
-            variant=c.variant,
+            mode=c.mode, variant=c.variant,
             time_min=breakdown.total_min if available else c.time_min,
             cost_inr=c.final_cost_inr,
+            cost_min_inr=c.cost_min_inr,
+            cost_max_inr=c.cost_max_inr,
+            cost_display=c.cost_display,
             surge_multiplier=c.surge_multiplier,
             risk_level=mode_risk,
             reliability_score=(
@@ -325,20 +321,12 @@ def transport_alternatives(
 
 
 @router.post("/optimal-pickup", response_model=OptimalPickupResponse)
-def optimal_pickup(
-    body: dict,
-    session: SessionDep,
-) -> Any:
-    """
-    Suggest the best nearby transit stop to start from to reduce cancellation risk.
-    Body: { origin_lat, origin_lon, radius_m (default 500) }
-    """
+def optimal_pickup(body: dict, session: SessionDep) -> Any:
     origin_lat: float = body.get("origin_lat", 0.0)
     origin_lon: float = body.get("origin_lon", 0.0)
     radius_m: int = body.get("radius_m", 500)
     radius_km = radius_m / 1000.0
 
-    # Fetch each type separately so bus stops can't crowd out metro/mmts
     metro_stops = transport_svc.find_nearest_stops(
         session, origin_lat, origin_lon, stop_type="metro", radius_km=radius_km, max_count=3
     )
@@ -352,82 +340,67 @@ def optimal_pickup(
 
     suggestions: list[PickupSuggestion] = []
     for stop in stops:
-        # Metro/MMTS stops reduce cancel risk more than bus stops
-        if stop.stop_type == "metro":
-            risk_reduction = 35
-        elif stop.stop_type == "mmts":
-            risk_reduction = 25
-        else:
-            risk_reduction = 10
-
+        risk_reduction = 35 if stop.stop_type == "metro" else 25 if stop.stop_type == "mmts" else 10
         suggestions.append(PickupSuggestion(
-            name=stop.name,
-            stop_type=stop.stop_type,
-            distance_m=stop.distance_m,
-            walk_min=stop.walk_min,
+            name=stop.name, stop_type=stop.stop_type,
+            distance_m=stop.distance_m, walk_min=stop.walk_min,
             risk_reduction_pct=risk_reduction,
-            lat=stop.latitude,
-            lon=stop.longitude,
+            lat=stop.latitude, lon=stop.longitude,
         ))
 
-    # Sort: metro first, then by distance
-    suggestions.sort(key=lambda s: (0 if s.stop_type == "metro" else 1 if s.stop_type == "mmts" else 2, s.distance_m))
-
+    suggestions.sort(key=lambda s: (
+        0 if s.stop_type == "metro" else 1 if s.stop_type == "mmts" else 2,
+        s.distance_m,
+    ))
     return OptimalPickupResponse(suggestions=suggestions)
 
 
 @router.post("/journey-cost", response_model=JourneyCostResponse)
-def journey_cost(
-    body: dict,
-    session: SessionDep,
-) -> Any:
-    """
-    Return full cost breakdown for all modes between two coordinates at a given datetime.
-    Body: { origin_lat, origin_lon, dest_lat, dest_lon, passengers, datetime (ISO 8601) }
-    """
+def journey_cost(body: dict, session: SessionDep) -> Any:
     origin_lat: float = body.get("origin_lat", 0.0)
     origin_lon: float = body.get("origin_lon", 0.0)
     dest_lat: float = body.get("dest_lat", 0.0)
     dest_lon: float = body.get("dest_lon", 0.0)
     passengers: int = body.get("passengers", 1)
+    is_festival: bool = body.get("is_festival", False)
 
     dt_str: str | None = body.get("datetime")
     if dt_str:
         try:
             dt = datetime.fromisoformat(dt_str)
-            hour = dt.hour
-            day_of_week = dt.weekday()
+            hour, day_of_week = dt.hour, dt.weekday()
         except ValueError:
             now = datetime.now()
-            hour = now.hour
-            day_of_week = now.weekday()
+            hour, day_of_week = now.hour, now.weekday()
     else:
         now = datetime.now()
-        hour = now.hour
-        day_of_week = now.weekday()
+        hour, day_of_week = now.hour, now.weekday()
 
     wx = weather_svc.get_weather()
-    distance_km = haversine_km(origin_lat, origin_lon, dest_lat, dest_lon)
+    distance_km, _ = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
 
     all_costs = cost_svc.calculate_all_costs(
-        distance_km, hour, wx.is_raining, day_of_week, passengers
+        distance_km, hour, wx.is_raining, day_of_week, passengers,
+        precipitation_mm=wx.precipitation_mm,
+        is_festival=is_festival,
     )
-
-    costs = [
-        CostEntry(
-            mode=c.mode,
-            variant=c.variant,
-            base_cost_inr=c.base_cost_inr,
-            surge_multiplier=c.surge_multiplier,
-            final_cost_inr=c.final_cost_inr,
-            time_min=c.time_min,
-            available=c.available,
-        )
-        for c in all_costs
-    ]
 
     return JourneyCostResponse(
         distance_km=round(distance_km, 2),
         is_raining=wx.is_raining,
-        costs=costs,
+        precipitation_mm=wx.precipitation_mm,
+        costs=[
+            CostEntry(
+                mode=c.mode, variant=c.variant,
+                base_cost_inr=c.base_cost_inr,
+                surge_multiplier=c.surge_multiplier,
+                final_cost_inr=c.final_cost_inr,
+                cost_min_inr=c.cost_min_inr,
+                cost_max_inr=c.cost_max_inr,
+                cost_display=c.cost_display,
+                time_min=c.time_min,
+                available=c.available,
+            )
+            for c in all_costs
+        ],
     )

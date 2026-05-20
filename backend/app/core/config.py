@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     EMAILS_FROM_EMAIL: EmailStr | None = None
     EMAILS_FROM_NAME: EmailStr | None = None
+    GOOGLE_MAPS_BACKEND_KEY: str | None = None
+    GOOGLE_MAPS_FRONTEND_KEY: str | None = None
 
     @model_validator(mode="after")
     def _set_default_emails_from(self) -> Self:

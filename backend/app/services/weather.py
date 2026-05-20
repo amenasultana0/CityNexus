@@ -11,7 +11,6 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Hyderabad city centre coordinates
 _HYD_LAT = 17.385
 _HYD_LON = 78.486
 
@@ -23,16 +22,16 @@ _OPEN_METEO_URL = (
     "&forecast_days=1"
 )
 
-# WMO weather codes that indicate rain
 _RAIN_CODES = {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99}
 
-_CACHE_TTL = 15 * 60   # 15 minutes in seconds
+_CACHE_TTL = 15 * 60
 _cache: dict = {}
 
 
 @dataclass
 class WeatherResult:
     is_raining: bool
+    precipitation_mm: float      # current hour precipitation in mm (for surge logic)
     temperature_c: float
     windspeed_kmh: float
     weather_code: int
@@ -70,11 +69,26 @@ def get_weather() -> WeatherResult:
     try:
         resp = httpx.get(_OPEN_METEO_URL, timeout=5.0)
         resp.raise_for_status()
-        cw = resp.json()["current_weather"]
-
+        data = resp.json()
+        cw = data["current_weather"]
         code = int(cw["weathercode"])
+
+        # Extract current hour's precipitation from hourly data
+        precipitation_mm = 0.0
+        try:
+            current_hour_str = cw["time"][:13]  # e.g. "2025-05-14T08"
+            hourly_times = data["hourly"]["time"]
+            hourly_precip = data["hourly"]["precipitation"]
+            for i, t in enumerate(hourly_times):
+                if t.startswith(current_hour_str):
+                    precipitation_mm = float(hourly_precip[i])
+                    break
+        except Exception:
+            precipitation_mm = 0.0
+
         result_data = {
             "is_raining": code in _RAIN_CODES,
+            "precipitation_mm": precipitation_mm,
             "temperature_c": float(cw["temperature"]),
             "windspeed_kmh": float(cw["windspeed"]),
             "weather_code": code,
@@ -88,6 +102,7 @@ def get_weather() -> WeatherResult:
         logger.warning("Open-Meteo request failed (%s) — returning dry weather default.", exc)
         return WeatherResult(
             is_raining=False,
+            precipitation_mm=0.0,
             temperature_c=28.0,
             windspeed_kmh=10.0,
             weather_code=0,
@@ -97,7 +112,6 @@ def get_weather() -> WeatherResult:
 
 
 def _weathercode_to_impact(code: int) -> tuple[bool, str, float]:
-    """Map WMO weathercode → (is_raining, condition_label, risk_multiplier)."""
     if code < 3:
         return False, "clear", 1.0
     elif code < 60:
@@ -109,18 +123,6 @@ def _weathercode_to_impact(code: int) -> tuple[bool, str, float]:
 
 
 def get_weather_impact(lat: float, lon: float) -> dict:
-    """
-    Fetch current weather for arbitrary coordinates via Open-Meteo and return
-    a risk-impact dict for use in cancellation prediction.
-
-    Returns:
-        {
-            "is_raining": bool,
-            "weather_condition": str,   # clear | cloudy | rain | heavy_rain
-            "weathercode": int,
-            "risk_multiplier": float    # 1.0 = no change, 1.3 = rain, 1.5 = heavy rain
-        }
-    """
     url = (
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
@@ -128,7 +130,6 @@ def get_weather_impact(lat: float, lon: float) -> dict:
         "&hourly=precipitation,weathercode"
         "&forecast_days=1"
     )
-
     try:
         resp = httpx.get(url, timeout=5.0)
         resp.raise_for_status()
