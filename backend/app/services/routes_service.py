@@ -17,7 +17,7 @@ from app.services.cost import haversine_km
 logger = logging.getLogger(__name__)
 
 _ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
-_FIELD_MASK = "routes.distanceMeters,routes.duration"
+_FIELD_MASK = "routes.distanceMeters,routes.duration,routes.travelAdvisory"
 
 
 def get_road_distance(

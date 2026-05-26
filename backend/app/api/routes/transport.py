@@ -174,9 +174,14 @@ def _build_time_breakdown(
     mode: str, variant: str | None, distance_km: float,
     hour: int, day_of_week: int, risk_level: str,
     board_walk_m: int = 0, alight_walk_m: int = 0, bus_stop_count: int = 3,
+    traffic_duration_min: float = 0,
 ) -> TimeBreakdown:
     mode_key = f"cab_{variant}" if mode == "cab" and variant else mode
-    travel = travel_only_min(mode_key, distance_km, hour)
+    # Use live traffic duration for road modes, formula for metro/bus
+    if traffic_duration_min > 0 and mode not in ("metro", "bus"):
+        travel = round(traffic_duration_min)
+    else:
+        travel = travel_only_min(mode_key, distance_km, hour)
     wait = _mode_wait_min(mode, risk_level, hour, day_of_week, bus_stop_count)
     walk = max(1, round((board_walk_m + alight_walk_m) / 80)) if (board_walk_m or alight_walk_m) else 0
     total = travel + wait + walk
@@ -212,7 +217,7 @@ def transport_alternatives(
     is_festival: bool = Query(default=False),
 ) -> Any:
     # Real road distance
-    distance_km, _ = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
+    distance_km, traffic_duration_min = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
 
     # Weather — get precipitation_mm for surge logic
     wx = weather_svc.get_weather()
@@ -270,6 +275,7 @@ def transport_alternatives(
             hour=hour, day_of_week=day_of_week, risk_level=mode_risk,
             board_walk_m=board_walk_m, alight_walk_m=alight_walk_m,
             bus_stop_count=bus_stop_count,
+            traffic_duration_min=traffic_duration_min,
         )
 
         stop_details: StopDetails | None = None
@@ -377,7 +383,7 @@ def journey_cost(body: dict, session: SessionDep) -> Any:
         hour, day_of_week = now.hour, now.weekday()
 
     wx = weather_svc.get_weather()
-    distance_km, _ = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
+    distance_km, traffic_duration_min = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
 
     all_costs = cost_svc.calculate_all_costs(
         distance_km, hour, wx.is_raining, day_of_week, passengers,
