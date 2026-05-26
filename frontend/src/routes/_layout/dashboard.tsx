@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import TripPlannerModal from "@/components/Common/TripPlannerModal"
 import {
   Badge,
   Box,
@@ -229,6 +230,8 @@ function Dashboard() {
   const [formData, setFormData] = useState<FormData | null>(null)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [geoError, setGeoError] = useState("")
+  const [plannerOpen, setPlannerOpen] = useState(false)
+
 
   const handleSubmit = async () => {
     if (!pickupText || !destText) return
@@ -485,6 +488,21 @@ function Dashboard() {
                 }}
               >
                 Analyse My Trip
+              </Button>
+              <Button
+                onClick={() => setPlannerOpen(true)}
+                size="lg"
+                mt={4}
+                style={{
+                  background: "transparent",
+                  color: TEAL,
+                  border: `1px solid ${TEAL}`,
+                  fontWeight: "600",
+                  borderRadius: "8px",
+                  padding: "12px 24px",
+                }}
+              >
+                Plan Trip →
               </Button>
             </Grid>
             {geoError && (
@@ -747,7 +765,7 @@ function Dashboard() {
                     <Flex gap={5} textAlign="center">
                       <Box>
                         <Text fontSize="xl" fontWeight="700" color={TEAL}>
-                          ₹{Math.round(bestOption.cost_inr)}
+                            {bestOption.cost_display}
                         </Text>
                         <Text fontSize="xs" color={SUBTLE}>Cost</Text>
                       </Box>
@@ -1084,7 +1102,7 @@ function Dashboard() {
                               {/* Price + time */}
                               <Box textAlign="right" flexShrink={0}>
                                 <Text fontWeight="700" fontSize="md" color={isUnavailable ? MUTED : PRIMARY}>
-                                  ₹{Math.round(opt.cost_inr)}
+                                  {opt.cost_display}
                                 </Text>
                                 <Text fontSize="xs" color={MUTED}>
                                   {opt.time_min} min · {opt.reliability_score}/10
@@ -1246,6 +1264,16 @@ function Dashboard() {
           )}
         </VStack>
       </Container>
+      <TripPlannerModal
+        isOpen={plannerOpen}
+        onClose={() => setPlannerOpen(false)}
+        initialOrigin={pickupText}
+        initialDest={destText}
+        initialOriginLat={formData?.originLat}
+        initialOriginLon={formData?.originLon}
+        initialDestLat={formData?.destLat}
+        initialDestLon={formData?.destLon}
+      />
     </Box>
   )
 }

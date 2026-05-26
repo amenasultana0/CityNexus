@@ -117,6 +117,10 @@ export interface TransportOption {
   variant: string | null
   time_min: number
   cost_inr: number
+  // ADD these three lines after cost_inr: number
+  cost_min_inr: number
+  cost_max_inr: number
+  cost_display: string
   surge_multiplier: number
   risk_level: string
   reliability_score: number
@@ -150,6 +154,10 @@ export interface CostEntry {
   base_cost_inr: number
   surge_multiplier: number
   final_cost_inr: number
+  // ADD these three lines after final_cost_inr: number
+  cost_min_inr: number
+  cost_max_inr: number
+  cost_display: string
   time_min: number
   available: boolean
 }
@@ -180,6 +188,10 @@ export interface DayPlan {
   recommended_mode: string
   variant: string | null
   cost_inr: number
+  // ADD these three lines after cost_inr: number
+  cost_min_inr: number
+  cost_max_inr: number
+  cost_display: string
   surge_multiplier: number
   time_min: number
   risk_level: string
@@ -306,23 +318,14 @@ export const geocodeLocation = async (query: string): Promise<GeocodedLocation |
 export const geocode = async (
   locationName: string,
 ): Promise<{ lat: number; lon: number }> => {
-  const response = await axios.get(
-    "https://nominatim.openstreetmap.org/search",
-    {
-      params: {
-        q: `${locationName},Hyderabad`,
-        format: "json",
-        limit: 1,
-      },
-      headers: { "User-Agent": "CityNexus/1.0" },
-    },
-  )
-  if (!response.data || response.data.length === 0) {
+  try {
+    const response = await api.get("/api/v1/utils/geocode/", {
+      params: { location: locationName },
+    })
+    return { lat: response.data.lat, lon: response.data.lon }
+  } catch (error) {
     throw new Error(`Could not find location: ${locationName}`)
   }
-  const result = response.data[0]
-  return { lat: parseFloat(result.lat), lon: parseFloat(result.lon) }
-
 }
 // -------------------------
 // Heatmap shared route state
@@ -434,3 +437,54 @@ export async function getNearbyTransitStops(
         "mmts",
   )
 }
+export interface PlanTripRequest {
+  origin_lat: number
+  origin_lon: number
+  dest_lat: number
+  dest_lon: number
+  arrive_by_hour: number
+  arrive_by_minute: number
+  day_offset: number
+}
+ 
+export interface SlotRecommendation {
+  label: "balanced" | "cheapest" | "fastest"
+  leave_hour: number
+  leave_minute: number
+  leave_time_label: string
+  arrive_time_label: string
+  buffer_min: number
+  fare_inr: number
+  fare_display: string
+  duration_min: number
+  mode: string
+  surge_multiplier: number
+  availability: string
+  reasons: string[]
+}
+ 
+export interface ForecastAlert {
+  type: "traffic" | "rain" | "surge" | "availability"
+  text: string
+}
+ 
+export interface ConfidenceLevel {
+  label: "High confidence" | "Moderate confidence" | "Conditions may change"
+  detail: string
+}
+ 
+export interface PlanTripResponse {
+  best: SlotRecommendation
+  alternatives: SlotRecommendation[]
+  alerts: ForecastAlert[]
+  confidence: ConfidenceLevel
+  metro_tip: string | null
+}
+ 
+export const planTrip = async (
+  payload: PlanTripRequest,
+): Promise<PlanTripResponse> => {
+  const { data } = await api.post("/api/v1/rides/plan-trip", payload)
+  return data
+}
+ 

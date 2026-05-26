@@ -57,6 +57,14 @@ function getRiskBg(level: string) {
   return "#e53e3e"
 }
 
+function formatINR(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
 function WeeklyPage() {
   const [pickupText, setPickupText] = useState("")
   const [destText, setDestText] = useState("")
@@ -254,7 +262,9 @@ function WeeklyPage() {
                   WEEKLY COST
                 </Text>
                 <Text fontSize="2xl" fontWeight="bold" color="blue.400">
-                  ₹{Math.round(plan.total_estimated_cost_inr)}
+                  {plan.total_estimated_cost_inr
+                    ? formatINR(plan.total_estimated_cost_inr)
+                    : "-"}
                 </Text>
               </Box>
               <Box bg="bg.subtle" borderRadius="xl" p={4} borderWidth="1px">
@@ -264,7 +274,7 @@ function WeeklyPage() {
                 <Flex align="center" gap={2}>
                   <Badge colorPalette="green">{cheapestDay?.day_name}</Badge>
                   <Text fontWeight="bold">
-                    ₹{cheapestDay ? Math.round(cheapestDay.cost_inr) : "-"}
+                    {cheapestDay ? cheapestDay.cost_display : "-"}
                   </Text>
                 </Flex>
               </Box>
@@ -348,7 +358,7 @@ function WeeklyPage() {
                       </Text>
                     </Box>
                     <Text textAlign="right" fontWeight="bold">
-                      ₹{Math.round(day.cost_inr)}
+                      {day.cost_display}
                     </Text>
                     <Text textAlign="right" fontSize="sm" color="gray.500">
                       {day.time_min}m
