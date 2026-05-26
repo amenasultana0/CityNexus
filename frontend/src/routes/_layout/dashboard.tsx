@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import TripPlannerModal from "@/components/Common/TripPlannerModal"
+import { buildUberUrl, buildOlaUrl } from "@/utils/uberDeepLink"
 import {
   Badge,
   Box,
@@ -761,11 +762,61 @@ function Dashboard() {
                         </Badge>
                       </Flex>
                       <Text color={MUTED} fontSize="sm">{bestOption.reason}</Text>
+                      {bestOption.mode !== "metro" &&
+                        bestOption.mode !== "bus" &&
+                        formData && (
+                          <Flex gap={2} mt={3}>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                window.open(
+                                  buildUberUrl(
+                                    { lat: formData.originLat, lng: formData.originLon, name: pickupText || "Pickup" },
+                                    { lat: formData.destLat, lng: formData.destLon, name: destText || "Destination" }
+                                  ),
+                                  "_blank"
+                                )
+                              }
+                              style={{
+                                background: "#000000",
+                                color: "#ffffff",
+                                fontWeight: "600",
+                                borderRadius: "8px",
+                                padding: "6px 14px",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              Book on Uber
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                window.open(
+                                  buildOlaUrl(
+                                    { lat: formData.originLat, lng: formData.originLon, name: pickupText || "Pickup" },
+                                    { lat: formData.destLat, lng: formData.destLon, name: destText || "Destination" }
+                                  ),
+                                  "_blank"
+                                )
+                              }
+                              style={{
+                                background: "#16a34a",
+                                color: "#ffffff",
+                                fontWeight: "600",
+                                borderRadius: "8px",
+                                padding: "6px 14px",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              Book on Ola
+                            </Button>
+                          </Flex>
+                      )}
                     </Box>
                     <Flex gap={5} textAlign="center">
                       <Box>
                         <Text fontSize="xl" fontWeight="700" color={TEAL}>
-                            {bestOption.cost_display}
+                          {bestOption.cost_display}
                         </Text>
                         <Text fontSize="xs" color={SUBTLE}>Cost</Text>
                       </Box>
