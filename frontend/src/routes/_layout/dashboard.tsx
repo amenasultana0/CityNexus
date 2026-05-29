@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef,useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import TripPlannerModal from "@/components/Common/TripPlannerModal"
 import { buildUberUrl, buildOlaUrl } from "@/utils/uberDeepLink"
@@ -36,7 +36,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   type PredictRequest,
   type WeatherImpactResponse,
-  geocode,
   getAlternatives,
   getBestTime,
   getJourneyCost,
@@ -48,6 +47,13 @@ import {
 import {
   saveRoute,
 } from "@/lib/api"
+import {
+  Autocomplete,
+  useJsApiLoader,
+} from "@react-google-maps/api"
+
+
+const LIBRARIES: ("places")[] = ["places"]
 
 function ErrorCard({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
@@ -224,25 +230,73 @@ function IconCircle({
 }
 
 function Dashboard() {
-  const [pickupText, setPickupText] = useState("")
-  const [destText, setDestText] = useState("")
   const [passengers, setPassengers] = useState(1)
   const [timeStr, setTimeStr] = useState("08:00")
   const [formData, setFormData] = useState<FormData | null>(null)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [geoError, setGeoError] = useState("")
-  const [plannerOpen, setPlannerOpen] = useState(false)
+  const [pickupText, setPickupText] = useState("")
+  const [sortMode, setSortMode] =
+  useState<
+    "cheapest" | "fastest"
+  >("cheapest")
+  const [destText, setDestText] =
+  useState("")
 
+const [pickupLocation, setPickupLocation] =
+  useState<{
+    lat: number
+    lng: number
+  } | null>(null)
+
+const [destLocation, setDestLocation] =
+  useState<{
+    lat: number
+    lng: number
+  } | null>(null)
+
+const pickupRef =
+  useRef<google.maps.places.Autocomplete | null>(
+    null,
+  )
+
+const destRef =
+  useRef<google.maps.places.Autocomplete | null>(
+    null,
+  )
+
+  const { isLoaded } =
+  useJsApiLoader({
+    googleMapsApiKey:
+      import.meta.env
+        .VITE_GOOGLE_MAPS_KEY,
+    libraries: LIBRARIES,
+  })
 
   const handleSubmit = async () => {
     if (!pickupText || !destText) return
     setIsGeocoding(true)
     setGeoError("")
     try {
-      const [pickup, dest] = await Promise.all([
-        geocode(pickupText),
-        geocode(destText),
-      ])
+      if (
+  !pickupLocation ||
+  !destLocation
+) {
+  setGeoError(
+    "Please select locations from dropdown",
+  )
+  return
+}
+
+const pickup = {
+  lat: pickupLocation.lat,
+  lon: pickupLocation.lng,
+}
+
+const dest = {
+  lat: destLocation.lat,
+  lon: destLocation.lng,
+}
       const h = parseInt(timeStr.split(":")[0], 10)
       const now = new Date()
       const jsDay = now.getDay()
@@ -278,6 +332,52 @@ function Dashboard() {
     } finally {
       setIsGeocoding(false)
     }
+  }
+
+  const onPickupPlaceChanged =
+  () => {
+    const place =
+      pickupRef.current?.getPlace()
+
+    if (
+      !place?.geometry?.location
+    )
+      return
+
+    setPickupText(
+      place.formatted_address ||
+        "",
+    )
+
+    setPickupLocation({
+      lat:
+        place.geometry.location.lat(),
+      lng:
+        place.geometry.location.lng(),
+    })
+  }
+
+const onDestPlaceChanged =
+  () => {
+    const place =
+      destRef.current?.getPlace()
+
+    if (
+      !place?.geometry?.location
+    )
+      return
+
+    setDestText(
+      place.formatted_address ||
+        "",
+    )
+
+    setDestLocation({
+      lat:
+        place.geometry.location.lat(),
+      lng:
+        place.geometry.location.lng(),
+    })
   }
 
   const weatherQuery = useQuery({
@@ -428,29 +528,59 @@ function Dashboard() {
               alignItems="end"
             >
               <Field label="PICKUP">
-                <Input
-                  placeholder="e.g. Ameerpet"
-                  value={pickupText}
-                  onChange={(e) => setPickupText(e.target.value)}
-                  bg={INPUT_BG}
-                  borderColor={BORDER}
-                  borderRadius="8px"
-                  color={PRIMARY}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                />
+                 {isLoaded && (
+    <Autocomplete
+      onLoad={(autocomplete) =>
+        (pickupRef.current =
+          autocomplete)
+      }
+      onPlaceChanged={
+        onPickupPlaceChanged
+      }
+    >
+      <Input
+        placeholder="e.g. Ameerpet"
+        value={pickupText}
+        onChange={(e) =>
+          setPickupText(
+            e.target.value,
+          )
+        }
+        bg={INPUT_BG}
+        borderColor={BORDER}
+        borderRadius="8px"
+        color={PRIMARY}
+      />
+    </Autocomplete>
+  )}
               </Field>
               <Field label="DESTINATION">
-                <Input
-                  placeholder="e.g. Gachibowli"
-                  value={destText}
-                  onChange={(e) => setDestText(e.target.value)}
-                  bg={INPUT_BG}
-                  borderColor={BORDER}
-                  borderRadius="8px"
-                  color={PRIMARY}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                />
-              </Field>
+  {isLoaded && (
+    <Autocomplete
+      onLoad={(autocomplete) =>
+        (destRef.current =
+          autocomplete)
+      }
+      onPlaceChanged={
+        onDestPlaceChanged
+      }
+    >
+      <Input
+        placeholder="e.g. Gachibowli"
+        value={destText}
+        onChange={(e) =>
+          setDestText(
+            e.target.value,
+          )
+        }
+        bg={INPUT_BG}
+        borderColor={BORDER}
+        borderRadius="8px"
+        color={PRIMARY}
+      />
+    </Autocomplete>
+  )}
+</Field>
               <Field label="PAX">
                 <Input
                   type="number"
@@ -1031,6 +1161,88 @@ function Dashboard() {
                 </Card>
               </Grid>
 
+                <Card>
+  <Flex
+    justify="space-between"
+    align="center"
+    mb={4}
+  >
+    <Text
+      fontWeight="700"
+      color={
+        sortMode ===
+        "cheapest"
+          ? GREEN
+          : MUTED
+      }
+    >
+      💰 Cheapest
+    </Text>
+
+    <Box
+      position="relative"
+      w="280px"
+      h="10px"
+      borderRadius="full"
+      bg={`linear-gradient(
+        to right,
+        ${GREEN},
+        ${BLUE}
+      )`}
+      cursor="pointer"
+      onClick={() =>
+        setSortMode(
+          sortMode ===
+            "cheapest"
+            ? "fastest"
+            : "cheapest",
+        )
+      }
+    >
+      <Box
+        position="absolute"
+        top="-7px"
+        left={
+          sortMode ===
+          "cheapest"
+            ? "0%"
+            : "92%"
+        }
+        w="24px"
+        h="24px"
+        bg="white"
+        border={`4px solid ${BLUE}`}
+        borderRadius="full"
+        transition="all 0.25s ease"
+        boxShadow="md"
+      />
+    </Box>
+
+    <Text
+      fontWeight="700"
+      color={
+        sortMode ===
+        "fastest"
+          ? BLUE
+          : MUTED
+      }
+    >
+      ⚡ Fastest
+    </Text>
+  </Flex>
+
+  <Text
+    fontSize="sm"
+    color={MUTED}
+    textAlign="center"
+  >
+    Showing{" "}
+    <strong>
+      {sortMode}
+    </strong>{" "}
+    transport options
+  </Text>
+</Card>
               {/* ── Transport Alternatives ── */}
               <Card>
                 <CardLabel>Transport Alternatives</CardLabel>
@@ -1046,13 +1258,33 @@ function Dashboard() {
                   <VStack gap={0} align="stretch">
                     {(() => {
                       const allOptions = alternativesQuery.data.options
-                      const sorted = [...allOptions].sort((a, b) => {
-                        if (a === bestOption) return -1
-                        if (b === bestOption) return 1
-                        if (a.available && !b.available) return -1
-                        if (!a.available && b.available) return 1
-                        return a.cost_inr - b.cost_inr
-                      })
+                      const sorted =
+                        [...allOptions].sort(
+                          (a, b) => {
+                            if (a === bestOption)
+                              return -1
+                            if (b === bestOption)
+                              return 1
+
+                            if (
+                              a.available &&
+                              !b.available
+                            )
+                              return -1
+                            if (
+                              !a.available &&
+                              b.available
+                            )
+                              return 1
+
+                            return sortMode ===
+                              "cheapest"
+                              ? a.cost_inr -
+                                  b.cost_inr
+                              : a.time_min -
+                                  b.time_min
+                          },
+                        )
                       return sorted.map((opt, i) => {
                         const isBest = opt === bestOption
                         const isUnavailable = !opt.available

@@ -17,6 +17,7 @@ import {
   Polygon,
   Autocomplete,
   DirectionsRenderer,
+  TrafficLayer,
   useJsApiLoader,
 } from "@react-google-maps/api"
 
@@ -494,6 +495,84 @@ return (
           Find Nearby Transit
         </Button>
 
+        {/* Route Guide */}
+
+        {(pickupStops.length > 0 ||
+  destinationStops.length > 0) && (
+  <Box
+    p={4}
+    borderWidth="1px"
+    borderRadius="lg"
+    bg="gray.50"
+  >
+    <Heading
+      size="sm"
+      mb={3}
+    >
+      Route Guide
+    </Heading>
+
+    <VStack
+      align="stretch"
+      gap={2}
+    >
+      <Flex align="center" gap={2}>
+        <Box
+          w="18px"
+          h="4px"
+          bg="red.500"
+          borderRadius="full"
+        />
+        <Text fontSize="sm">
+          Main trip route
+          (pickup →
+          destination)
+        </Text>
+      </Flex>
+
+      <Flex align="center" gap={2}>
+        <Box
+          w="18px"
+          h="4px"
+          bg="blue.500"
+          borderRadius="full"
+        />
+        <Text fontSize="sm">
+          Pickup →
+          nearby transit
+          stops
+        </Text>
+      </Flex>
+
+      <Flex align="center" gap={2}>
+        <Box
+          w="18px"
+          h="4px"
+          bg="green.500"
+          borderRadius="full"
+        />
+        <Text fontSize="sm">
+          Destination →
+          nearby transit
+          stops
+        </Text>
+      </Flex>
+
+      <Flex align="center" gap={2}>
+        <Box
+          w="18px"
+          h="4px"
+          bgGradient="linear(to-r, green.400, orange.400, red.500)"
+          borderRadius="full"
+        />
+        <Text fontSize="sm">
+          Traffic level
+          (low → heavy)
+        </Text>
+      </Flex>
+    </VStack>
+  </Box>
+)}
         {/* Loading */}
         {loadingStops && (
           <Flex
@@ -641,6 +720,8 @@ return (
             map
         }}
       >
+
+      <TrafficLayer />
         {/* Origin */}
         {origin && (
           <>
