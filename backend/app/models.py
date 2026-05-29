@@ -198,3 +198,22 @@ class UserSearch(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+
+class BusRoute(SQLModel, table=True):
+    """TSRTC bus route timetable data."""
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+
+    route: str = Field(index=True, max_length=50)
+    direction: str = Field(max_length=20)
+
+    source: str = Field(max_length=255)
+    destination: str = Field(max_length=255)
+
+    first_bus: str = Field(max_length=20)
+    last_bus: str = Field(max_length=20)
+
+    trips_per_day: int = 0
+
+    timetable_json: str = Field(default="[]")
+    stops_json: str = Field(default="[]")

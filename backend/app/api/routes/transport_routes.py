@@ -10,6 +10,10 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from app.api.deps import SessionDep
+from sqlmodel import select
+from app.models import BusRoute
+from app.scripts.scrape_tsrtc import get_next_bus_time
+import json
 from app.services import cost as cost_svc
 from app.services import demand as demand_svc
 from app.services import transport as transport_svc
@@ -65,6 +69,18 @@ class JourneyCostResponse(BaseModel):
     distance_km: float
     is_raining: bool
     costs: list[CostEntry]
+
+class BusStopScheduleResponse(BaseModel):
+    route: str
+    direction: str
+    source: str | None
+    destination: str | None
+    next_bus: str | None
+    first_bus: str | None
+    last_bus: str | None
+    trips_per_day: int | None
+    timetable: list[str]
+    stops: list[str]    
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -255,3 +271,69 @@ def journey_cost(
         is_raining=wx.is_raining,
         costs=costs,
     )
+
+@router.get("/bus-stop-schedule", response_model=BusStopScheduleResponse)
+def bus_stop_schedule(
+    route: str,
+    direction: str = Query(default="forward"),
+    session: SessionDep,
+) -> Any:
+    """
+    Get bus timetable from database (NOT live scraping).
+    Example:
+    /transport/bus-stop-schedule?route=8A&direction=forward
+    """
+
+    record = session.exec(
+        select(BusRoute).where(
+            BusRoute.route == route,
+            BusRoute.direction == direction,
+        )
+    ).first()
+
+    if not record:
+        return {
+            "route": route,
+            "direction": direction,
+            "source": None,
+            "destination": None,
+            "next_bus": None,
+            "first_bus": None,
+            "last_bus": None,
+            "trips_per_day": None,
+            "timetable": [],
+            "stops": [],
+        }
+
+    timetable = (
+        json.loads(record.timetable_json)
+        if record.timetable_json
+        else []
+    )
+
+    stops = (
+        json.loads(record.stops_json)
+        if record.stops_json
+        else []
+    )
+
+    next_bus = get_next_bus_time(route, direction)
+
+    return BusStopScheduleResponse(
+        route=record.route,
+        direction=record.direction,
+        source=record.source,
+        destination=record.destination,
+        next_bus=next_bus,
+        first_bus=record.first_bus,
+        last_bus=record.last_bus,
+        trips_per_day=record.trips_per_day,
+        timetable=timetable,
+        stops=stops,
+    )
+
+@router.get("/bus-stop-schedule")
+def bus_stop_schedule() -> dict:
+    return {
+        "message": "endpoint working"
+    }    
