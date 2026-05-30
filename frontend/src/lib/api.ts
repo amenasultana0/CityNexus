@@ -175,6 +175,13 @@ export interface WeatherImpactResponse {
 }
 
 export interface DayPlan {
+  is_festival: boolean
+  festival_name: string | null
+  weather_desc: string
+  weather_code: number
+  is_raining: boolean
+  cab_cost_inr: number
+  savings_vs_cab: number
   date: string
   day_name: string
   recommended_mode: string
@@ -190,6 +197,8 @@ export interface WeeklyPlanResponse {
   weekly_plan: DayPlan[]
   cheapest_mode: string
   total_estimated_cost_inr: number
+  total_cab_cost_inr: number
+  total_savings_inr: number
 }
 
 export interface WeeklyPlanRequest {
@@ -199,6 +208,7 @@ export interface WeeklyPlanRequest {
   dest_lon: number
   passengers: number
   departure_time: string
+  round_trip?: boolean
 }
 
 // ─── API Functions ────────────────────────────────────────────────────────────
