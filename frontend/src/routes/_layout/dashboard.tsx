@@ -249,6 +249,8 @@ const [pickupLocation, setPickupLocation] =
     lng: number
   } | null>(null)
 
+const [plannerOpen, setPlannerOpen] = useState(false)
+
 const [destLocation, setDestLocation] =
   useState<{
     lat: number
@@ -531,12 +533,17 @@ const onDestPlaceChanged =
                  {isLoaded && (
     <Autocomplete
       onLoad={(autocomplete) =>
-        (pickupRef.current =
-          autocomplete)
+        (pickupRef.current = autocomplete)
       }
-      onPlaceChanged={
-        onPickupPlaceChanged
-      }
+      onPlaceChanged={onPickupPlaceChanged}
+      options={{
+        componentRestrictions: { country: "in" },
+        bounds: new google.maps.LatLngBounds(
+          { lat: 17.2, lng: 78.2 },
+          { lat: 17.6, lng: 78.7 }
+        ),
+        strictBounds: false,
+      }}
     >
       <Input
         placeholder="e.g. Ameerpet"
@@ -558,12 +565,17 @@ const onDestPlaceChanged =
   {isLoaded && (
     <Autocomplete
       onLoad={(autocomplete) =>
-        (destRef.current =
-          autocomplete)
+        (destRef.current = autocomplete)
       }
-      onPlaceChanged={
-        onDestPlaceChanged
-      }
+      onPlaceChanged={onDestPlaceChanged}
+      options={{
+        componentRestrictions: { country: "in" },
+        bounds: new google.maps.LatLngBounds(
+          { lat: 17.2, lng: 78.2 },
+          { lat: 17.6, lng: 78.7 }
+        ),
+        strictBounds: false,
+      }}
     >
       <Input
         placeholder="e.g. Gachibowli"

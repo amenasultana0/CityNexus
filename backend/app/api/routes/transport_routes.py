@@ -121,10 +121,13 @@ def transport_alternatives(
     )
 
     metro_nearby = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="metro", radius_km=1.0, max_count=1
+        session, origin_lat, origin_lon, stop_type="metro", radius_km=1.5, max_count=1
     )
-    metro_accessible = len(metro_nearby) > 0
-
+    mmts_nearby = transport_svc.find_nearest_stops(
+        session, origin_lat, origin_lon, stop_type="mmts", radius_km=1.5, max_count=1
+    )
+    metro_accessible = len(metro_nearby) > 0 or len(mmts_nearby) > 0
+    
     options: list[TransportOption] = []
     for c in all_costs:
         if c.mode == "metro" and not metro_accessible:
