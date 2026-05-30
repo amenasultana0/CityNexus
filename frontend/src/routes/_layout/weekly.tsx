@@ -56,7 +56,7 @@ function getRiskColor(level: string): string {
 }
 
 function getRiskBg(level: string): string {
-  if (level === "low") return "#dcfce7"
+   if (level === "low") return "#dcfce7"
   if (level === "moderate") return "#fef3c7"
   return "#fee2e2"
 }
@@ -93,6 +93,14 @@ function CardLabel({ children }: { children: React.ReactNode }) {
       {children}
     </Text>
   )
+}
+
+function formatINR(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value)
 }
 
 function WeeklyPage() {
@@ -208,10 +216,71 @@ function WeeklyPage() {
                 <Text fontSize="xs" color={MUTED} flex="1">
                   📍 Recent: <strong>{recentRoutes.pickupText.split(",")[0]}</strong> → <strong>{recentRoutes.destText.split(",")[0]}</strong>
                 </Text>
-                <Box
-                  px={3} py={1} borderRadius="full" bg={TEAL} color="white" fontSize="xs" fontWeight="700"
-                  cursor="pointer" onClick={applyRecentRoute}
-                  _hover={{ opacity: 0.85 }}
+                <Flex align="center" gap={2}>
+                  <Text fontSize="2xl">
+                    {MODE_EMOJI[plan.cheapest_mode] || "🚌"}
+                  </Text>
+                  <Text fontWeight="bold" textTransform="capitalize">
+                    {plan.cheapest_mode}
+                  </Text>
+                </Flex>
+              </Box>
+              <Box bg="bg.subtle" borderRadius="xl" p={4} borderWidth="1px">
+                <Text fontSize="xs" color="gray.500" fontWeight="bold" mb={1}>
+                  WEEKLY COST
+                </Text>
+                <Text fontSize="2xl" fontWeight="bold" color="blue.400">
+                  {plan.total_estimated_cost_inr
+                    ? formatINR(plan.total_estimated_cost_inr)
+                    : "-"}
+                </Text>
+              </Box>
+              <Box bg="bg.subtle" borderRadius="xl" p={4} borderWidth="1px">
+                <Text fontSize="xs" color="gray.500" fontWeight="bold" mb={1}>
+                  CHEAPEST DAY
+                </Text>
+                <Flex align="center" gap={2}>
+                  <Badge colorPalette="green">{cheapestDay?.day_name}</Badge>
+                  <Text fontWeight="bold">
+                    {cheapestDay ? cheapestDay.cost_display : "-"}
+                  </Text>
+                </Flex>
+              </Box>
+              <Box bg="bg.subtle" borderRadius="xl" p={4} borderWidth="1px">
+                <Text fontSize="xs" color="gray.500" fontWeight="bold" mb={1}>
+                  RISKIEST DAY
+                </Text>
+                <Flex align="center" gap={2}>
+                  <Badge
+                    colorPalette={
+                      getRiskPalette(riskiestDay?.risk_level || "") as any
+                    }
+                  >
+                    {riskiestDay?.day_name}
+                  </Badge>
+                  <Text fontSize="sm" textTransform="capitalize">
+                    {riskiestDay?.risk_level}
+                  </Text>
+                </Flex>
+              </Box>
+            </Grid>
+
+            {/* ── 7-Day Table ── */}
+            <Box bg="bg.subtle" borderRadius="xl" p={6} borderWidth="1px" overflowX="auto">
+              <Heading size="sm" color="gray.500" mb={4}>
+                7-DAY PLAN
+              </Heading>
+              <Box minW="600px">
+                {/* Header */}
+                <Grid
+                  templateColumns="100px 90px 1fr 80px 70px 90px"
+                  gap={3}
+                  px={4}
+                  py={2}
+                  fontSize="xs"
+                  fontWeight="bold"
+                  color="gray.500"
+                  borderBottomWidth="1px"
                 >
                   Use This Route
                 </Box>
@@ -302,9 +371,23 @@ function WeeklyPage() {
                         {avoidCabDays.map((d) => d.day_name).join(", ")} — high cancellation risk or festival surge expected
                       </Text>
                     </Box>
-                  </Flex>
-                </Box>
-              )}
+                    <Text textAlign="right" fontWeight="bold">
+                      {day.cost_display}
+                    </Text>
+                    <Text textAlign="right" fontSize="sm" color="gray.500">
+                      {day.time_min}m
+                    </Text>
+                    <Flex justify="center">
+                      <Badge
+                        colorPalette={getRiskPalette(day.risk_level) as any}
+                      >
+                        {day.risk_level}
+                      </Badge>
+                    </Flex>
+                  </Grid>
+                ))}
+              </Box>
+            </Box>
 
               {/* ── Festival Alert ── */}
               {festiveDays.length > 0 && (

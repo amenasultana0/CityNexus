@@ -1,5 +1,7 @@
 import { useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import TripPlannerModal from "@/components/Common/TripPlannerModal"
+import { buildUberUrl, buildOlaUrl } from "@/utils/uberDeepLink"
 import {
   Badge,
   Box,
@@ -174,8 +176,35 @@ function Dashboard() {
   const pickupRef = useRef<google.maps.places.Autocomplete | null>(null)
   const destRef = useRef<google.maps.places.Autocomplete | null>(null)
 
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_KEY,
+const [pickupLocation, setPickupLocation] =
+  useState<{
+    lat: number
+    lng: number
+  } | null>(null)
+
+const [plannerOpen, setPlannerOpen] = useState(false)
+
+const [destLocation, setDestLocation] =
+  useState<{
+    lat: number
+    lng: number
+  } | null>(null)
+
+const pickupRef =
+  useRef<google.maps.places.Autocomplete | null>(
+    null,
+  )
+
+const destRef =
+  useRef<google.maps.places.Autocomplete | null>(
+    null,
+  )
+
+  const { isLoaded } =
+  useJsApiLoader({
+    googleMapsApiKey:
+      import.meta.env
+        .VITE_GOOGLE_MAPS_KEY,
     libraries: LIBRARIES,
   })
 
@@ -337,19 +366,69 @@ function Dashboard() {
           <Card>
             <Grid templateColumns={{ base: "1fr", md: "1fr 1fr 80px 120px auto" }} gap={4} alignItems="end">
               <Field label="PICKUP">
-                {isLoaded && (
-                  <Autocomplete onLoad={(a) => (pickupRef.current = a)} onPlaceChanged={onPickupPlaceChanged}>
-                    <Input placeholder="e.g. Ameerpet" value={pickupText} onChange={(e) => setPickupText(e.target.value)} bg={INPUT_BG} borderColor={BORDER} borderRadius="8px" color={PRIMARY} />
-                  </Autocomplete>
-                )}
+                 {isLoaded && (
+    <Autocomplete
+      onLoad={(autocomplete) =>
+        (pickupRef.current = autocomplete)
+      }
+      onPlaceChanged={onPickupPlaceChanged}
+      options={{
+        componentRestrictions: { country: "in" },
+        bounds: new google.maps.LatLngBounds(
+          { lat: 17.2, lng: 78.2 },
+          { lat: 17.6, lng: 78.7 }
+        ),
+        strictBounds: false,
+      }}
+    >
+      <Input
+        placeholder="e.g. Ameerpet"
+        value={pickupText}
+        onChange={(e) =>
+          setPickupText(
+            e.target.value,
+          )
+        }
+        bg={INPUT_BG}
+        borderColor={BORDER}
+        borderRadius="8px"
+        color={PRIMARY}
+      />
+    </Autocomplete>
+  )}
               </Field>
               <Field label="DESTINATION">
-                {isLoaded && (
-                  <Autocomplete onLoad={(a) => (destRef.current = a)} onPlaceChanged={onDestPlaceChanged}>
-                    <Input placeholder="e.g. Gachibowli" value={destText} onChange={(e) => setDestText(e.target.value)} bg={INPUT_BG} borderColor={BORDER} borderRadius="8px" color={PRIMARY} />
-                  </Autocomplete>
-                )}
-              </Field>
+  {isLoaded && (
+    <Autocomplete
+      onLoad={(autocomplete) =>
+        (destRef.current = autocomplete)
+      }
+      onPlaceChanged={onDestPlaceChanged}
+      options={{
+        componentRestrictions: { country: "in" },
+        bounds: new google.maps.LatLngBounds(
+          { lat: 17.2, lng: 78.2 },
+          { lat: 17.6, lng: 78.7 }
+        ),
+        strictBounds: false,
+      }}
+    >
+      <Input
+        placeholder="e.g. Gachibowli"
+        value={destText}
+        onChange={(e) =>
+          setDestText(
+            e.target.value,
+          )
+        }
+        bg={INPUT_BG}
+        borderColor={BORDER}
+        borderRadius="8px"
+        color={PRIMARY}
+      />
+    </Autocomplete>
+  )}
+</Field>
               <Field label="PAX">
                 <Input type="number" min={1} max={12} value={passengers} onChange={(e) => setPassengers(Number(e.target.value))} bg={INPUT_BG} borderColor={BORDER} borderRadius="8px" color={PRIMARY} />
               </Field>
@@ -358,7 +437,22 @@ function Dashboard() {
               </Field>
               <UIButton onClick={handleSubmit} loading={isGeocoding} size="lg" mt={4} style={{ background: BLUE, color: "#ffffff", fontWeight: "600", borderRadius: "8px", padding: "12px 24px" }}>
                 Analyse My Trip
-              </UIButton>
+              </Button>
+              <Button
+                onClick={() => setPlannerOpen(true)}
+                size="lg"
+                mt={4}
+                style={{
+                  background: "transparent",
+                  color: TEAL,
+                  border: `1px solid ${TEAL}`,
+                  fontWeight: "600",
+                  borderRadius: "8px",
+                  padding: "12px 24px",
+                }}
+              >
+                Plan Trip →
+              </Button>
             </Grid>
             {geoError && <Text color={RED} mt={2} fontSize="sm">{geoError}</Text>}
           </Card>
@@ -451,11 +545,76 @@ function Dashboard() {
                         <Badge colorPalette={getRiskColorPalette(bestOption.risk_level) as any} variant="outline">{bestOption.risk_level} risk</Badge>
                       </Flex>
                       <Text color={MUTED} fontSize="sm">{bestOption.reason}</Text>
+                      {bestOption.mode !== "metro" &&
+                        bestOption.mode !== "bus" &&
+                        formData && (
+                          <Flex gap={2} mt={3}>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                window.open(
+                                  buildUberUrl(
+                                    { lat: formData.originLat, lng: formData.originLon, name: pickupText || "Pickup" },
+                                    { lat: formData.destLat, lng: formData.destLon, name: destText || "Destination" }
+                                  ),
+                                  "_blank"
+                                )
+                              }
+                              style={{
+                                background: "#000000",
+                                color: "#ffffff",
+                                fontWeight: "600",
+                                borderRadius: "8px",
+                                padding: "6px 14px",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              Book on Uber
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                window.open(
+                                  buildOlaUrl(
+                                    { lat: formData.originLat, lng: formData.originLon, name: pickupText || "Pickup" },
+                                    { lat: formData.destLat, lng: formData.destLon, name: destText || "Destination" }
+                                  ),
+                                  "_blank"
+                                )
+                              }
+                              style={{
+                                background: "#16a34a",
+                                color: "#ffffff",
+                                fontWeight: "600",
+                                borderRadius: "8px",
+                                padding: "6px 14px",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              Book on Ola
+                            </Button>
+                          </Flex>
+                      )}
                     </Box>
                     <Flex gap={5} textAlign="center">
-                      <Box><Text fontSize="xl" fontWeight="700" color={TEAL}>₹{Math.round(bestOption.cost_inr)}</Text><Text fontSize="xs" color={SUBTLE}>Cost</Text></Box>
-                      <Box><Text fontSize="xl" fontWeight="700" color={PRIMARY}>{bestOption.time_min} min</Text><Text fontSize="xs" color={SUBTLE}>Time</Text></Box>
-                      <Box><Text fontSize="xl" fontWeight="700" color={PRIMARY}>{bestOption.reliability_score}/10</Text><Text fontSize="xs" color={SUBTLE}>Reliability</Text></Box>
+                      <Box>
+                        <Text fontSize="xl" fontWeight="700" color={TEAL}>
+                          {bestOption.cost_display}
+                        </Text>
+                        <Text fontSize="xs" color={SUBTLE}>Cost</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="xl" fontWeight="700" color={PRIMARY}>
+                          {bestOption.time_min} min
+                        </Text>
+                        <Text fontSize="xs" color={SUBTLE}>Time</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="xl" fontWeight="700" color={PRIMARY}>
+                          {bestOption.reliability_score}/10
+                        </Text>
+                        <Text fontSize="xs" color={SUBTLE}>Reliability</Text>
+                      </Box>
                     </Flex>
                   </Flex>
                 ) : <Text color={MUTED}>No transport options available</Text>}
@@ -608,8 +767,12 @@ function Dashboard() {
                                 <Text fontSize="xs" color={MUTED}>{opt.reason}</Text>
                               </Box>
                               <Box textAlign="right" flexShrink={0}>
-                                <Text fontWeight="700" fontSize="md" color={isUnavailable ? MUTED : PRIMARY}>₹{Math.round(opt.cost_inr)}</Text>
-                                <Text fontSize="xs" color={MUTED}>{opt.time_min} min · {opt.reliability_score}/10</Text>
+                                <Text fontWeight="700" fontSize="md" color={isUnavailable ? MUTED : PRIMARY}>
+                                  {opt.cost_display}
+                                </Text>
+                                <Text fontSize="xs" color={MUTED}>
+                                  {opt.time_min} min · {opt.reliability_score}/10
+                                </Text>
                               </Box>
                             </Flex>
                           </Box>
@@ -741,6 +904,16 @@ function Dashboard() {
           </Portal>
         </Dialog.Root>
       </Container>
+      <TripPlannerModal
+        isOpen={plannerOpen}
+        onClose={() => setPlannerOpen(false)}
+        initialOrigin={pickupText}
+        initialDest={destText}
+        initialOriginLat={formData?.originLat}
+        initialOriginLon={formData?.originLon}
+        initialDestLat={formData?.destLat}
+        initialDestLon={formData?.destLon}
+      />
     </Box>
   )
 }
