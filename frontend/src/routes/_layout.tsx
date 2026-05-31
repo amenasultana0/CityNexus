@@ -1,7 +1,7 @@
 import { Box, Flex, Text } from "@chakra-ui/react"
 import { createFileRoute, Outlet, Link, useNavigate } from "@tanstack/react-router"
 import { FiSun, FiMoon, FiSettings, FiLogOut, FiUser } from "react-icons/fi"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import useAuth from "@/hooks/useAuth"
 
 export const Route = createFileRoute("/_layout")({
@@ -18,8 +18,18 @@ const NAV_ITEMS = [
 
 function Layout() {
   const [dark, setDark] = useState(false)
+  const [clockStr, setClockStr] = useState(() =>
+    new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+  )
   const navigate = useNavigate()
   const { logout } = useAuth()
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setClockStr(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const BG       = dark ? "#0a1628" : "#f8faff"
   const NAV_BG   = dark ? "#0d1f3c" : "#ffffff"
@@ -79,8 +89,20 @@ function Layout() {
           ))}
         </Flex>
 
-        {/* Right — dark mode, settings, avatar, logout */}
+        {/* Right — clock, dark mode, settings, avatar, logout */}
         <Flex align="center" gap={2}>
+          <Text
+            fontSize="sm"
+            fontWeight="600"
+            color={TEXT}
+            px={3}
+            py={1}
+            borderRadius="8px"
+            bg={ICON_BG}
+            style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em" }}
+          >
+            {clockStr}
+          </Text>
           {/* Dark / Light toggle */}
           <Box
             as="button"

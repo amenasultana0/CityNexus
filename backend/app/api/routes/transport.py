@@ -259,10 +259,6 @@ def transport_alternatives(
             mode_risk = "moderate"
         else:
             mode_risk = demand_info.risk_level
-<<<<<<< HEAD
-=======
-
->>>>>>> e422be5b8619b4ca6636470fd740e1849c2410b5
         board_walk_m = 0
         alight_walk_m = 0
         if c.mode == "metro":
