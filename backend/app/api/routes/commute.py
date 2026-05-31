@@ -18,7 +18,6 @@ from app.services import cost as cost_svc
 from app.services import demand as demand_svc
 from app.services import weather as weather_svc
 from app.services import transport as transport_svc
-from app.services.cost import haversine_km
 from app.core.config import settings
 from app.services.routes_service import get_road_distance
 
@@ -169,7 +168,6 @@ def _pick_best_mode(costs: list, risk_level: str, is_festival: bool, is_raining:
     if not available:
         return costs[0]
 
-    # On festival days or high risk or rain, prefer fixed-schedule modes
     if is_festival or risk_level == "high" or is_raining:
         fixed = [c for c in available if c.mode in {"metro", "bus"}]
         if fixed:
@@ -236,7 +234,7 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
     forecast = _fetch_weather_forecast(body.origin_lat, body.origin_lon, days=7)
     forecast_by_date: dict[str, dict] = {f["date"]: f for f in forecast}
 
-    # Fallback to live weather for today if forecast fails
+    # Fallback to live weather if forecast fails
     live_wx = weather_svc.get_weather()
 
     # Routes API called once — distance doesn't change across days

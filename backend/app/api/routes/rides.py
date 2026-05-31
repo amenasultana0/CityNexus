@@ -816,8 +816,6 @@ def best_time_to_leave(
             risk_level=demand_info.risk_level,
         ))
 
-    best = next((s for s in slots if s.color == "green"), None)
-    if best is None:
-        best = next((s for s in slots if s.color == "yellow"), None)
+    best = min(slots, key=lambda s: s.cancel_risk) if slots else None
 
     return BestTimeResponse(slots=slots, best_slot=best)

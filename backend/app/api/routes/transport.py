@@ -187,7 +187,6 @@ def _build_time_breakdown(
     traffic_duration_min: float = 0,
 ) -> TimeBreakdown:
     mode_key = f"cab_{variant}" if mode == "cab" and variant else mode
-    # Use live traffic duration for road modes, formula for metro/bus
     if traffic_duration_min > 0 and mode not in ("metro", "bus"):
         travel = round(traffic_duration_min)
     else:
@@ -226,7 +225,6 @@ def transport_alternatives(
     is_raining: bool = Query(default=False),
     is_festival: bool = Query(default=False),
 ) -> Any:
-    # Real road distance via Google Routes API (falls back to haversine × 1.4)
     distance_km, traffic_duration_min = get_road_distance(
         origin_lat, origin_lon, dest_lat, dest_lon
     )
@@ -250,7 +248,10 @@ def transport_alternatives(
     metro_nearby = transport_svc.find_nearest_stops(
         session, origin_lat, origin_lon, stop_type="metro", radius_km=1.5, max_count=1
     )
-    metro_accessible = len(metro_nearby) > 0
+    mmts_nearby = transport_svc.find_nearest_stops(
+        session, origin_lat, origin_lon, stop_type="mmts", radius_km=1.5, max_count=1
+    )
+    metro_accessible = len(metro_nearby) > 0 or len(mmts_nearby) > 0
 
     bus_nearby = transport_svc.find_nearest_stops(
         session, origin_lat, origin_lon, stop_type="bus", radius_km=1.0, max_count=1

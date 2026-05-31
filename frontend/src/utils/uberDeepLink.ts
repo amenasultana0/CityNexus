@@ -23,8 +23,10 @@ export function buildOlaUrl(
   const params = new URLSearchParams({
     pickup_lat: pickup.lat.toString(),
     pickup_lng: pickup.lng.toString(),
+    pickup_name: pickup.name,
     drop_lat: dropoff.lat.toString(),
     drop_lng: dropoff.lng.toString(),
+    drop_name: dropoff.name,
   });
 
   return `https://book.olacabs.com/?${params.toString()}`;
