@@ -17,7 +17,7 @@ import {
 } from "@chakra-ui/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { ArrowLeftRight, MapPin } from "lucide-react"
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Button as UIButton } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -1019,28 +1019,124 @@ function Dashboard() {
               </Card>
 
               {/* ── Best Time to Leave ── */}
-              <Card>
-                <CardLabel>Best Time to Leave</CardLabel>
-                {bestTimeQuery.isLoading ? <Skeleton h="80px" /> : bestTimeQuery.isError ? <ErrorCard message="Could not load data — check backend connection" onRetry={() => bestTimeQuery.refetch()} /> : bestTimeQuery.data ? (
-                  <>
-                    <Flex gap={2} mb={4} wrap="wrap">
-                      {bestTimeQuery.data.slots.map((slot, i) => (
-                        <Box key={i} flex="1" minW="60px" bg={slot.color === "green" ? GREEN : slot.color === "yellow" ? AMBER : RED} borderRadius="8px" p={2} textAlign="center">
-                          <Text fontSize="xs" color="white" fontWeight="700">{slot.time_label}</Text>
-                          <Text fontSize="xs" color="white">{Math.round(slot.cancel_risk * 100)}%</Text>
-                        </Box>
-                      ))}
-                    </Flex>
-                    {bestTimeQuery.data.best_slot && (
-                      <Box border={`1px solid ${GREEN}`} borderRadius="10px" p={4} bg={`${GREEN}0d`}>
-                        <Text color={GREEN} fontWeight="500" fontSize="sm">
-                          ✅ Best: Leave at {bestTimeQuery.data.best_slot.time_label} — {bestTimeQuery.data.best_slot.risk_level} risk ({Math.round(bestTimeQuery.data.best_slot.cancel_risk * 100)}% cancellation rate)
+              <Box bg={CARD} borderRadius="24px" boxShadow={CARD_SHADOW} p={7}>
+                {/* Header */}
+                <Flex align="flex-start" justify="space-between" mb={6} flexWrap="wrap" gap={3}>
+                  <Box>
+                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={1}>
+                      Timing Intelligence
+                    </Text>
+                    <Heading size="lg" color={PRIMARY} fontWeight="800">When the streets forgive you</Heading>
+                  </Box>
+                  <Flex align="center" gap={2}>
+                    <Box w="10px" h="10px" borderRadius="full" bg={GREEN} />
+                    <Text fontSize="xs" color={MUTED}>Lower curve = fewer cancellations</Text>
+                  </Flex>
+                </Flex>
+
+                {bestTimeQuery.isLoading ? (
+                  <Skeleton h="200px" borderRadius="12px" />
+                ) : bestTimeQuery.isError ? (
+                  <ErrorCard message="Could not load — check backend" onRetry={() => bestTimeQuery.refetch()} />
+                ) : bestTimeQuery.data ? (() => {
+                  const slots = bestTimeQuery.data.slots
+                  const bestSlot = bestTimeQuery.data.best_slot
+                  const currentSlot = slots[0]
+                  const chartData = slots.map((s) => ({
+                    time: s.time_label,
+                    rate: Math.round(s.cancel_risk * 100),
+                    isBest: s.time_label === bestSlot?.time_label,
+                  }))
+
+                  return (
+                    <>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <AreaChart data={chartData} margin={{ top: 36, right: 20, bottom: 4, left: 0 }}>
+                          <defs>
+                            <linearGradient id="cancelGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={TEAL} stopOpacity={0.22} />
+                              <stop offset="100%" stopColor={TEAL} stopOpacity={0.01} />
+                            </linearGradient>
+                          </defs>
+                          <XAxis
+                            dataKey="time"
+                            tick={{ fontSize: 13, fill: MUTED, fontWeight: 600 }}
+                            axisLine={false} tickLine={false}
+                          />
+                          <YAxis hide domain={[0, 100]} />
+                          <Tooltip
+                            formatter={(v) => [`${v}%`, "Cancel risk"]}
+                            contentStyle={{ borderRadius: "10px", border: `1px solid ${BORDER}`, fontSize: "13px" }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="rate"
+                            stroke={TEAL}
+                            strokeWidth={2.5}
+                            fill="url(#cancelGrad)"
+                            activeDot={{ r: 6, fill: TEAL, stroke: "white", strokeWidth: 2 }}
+                            dot={(dotProps: any) => {
+                              const { cx, cy, index } = dotProps
+                              if (index >= chartData.length) return <g key={index} />
+                              const d = chartData[index]
+                              const isBest = d.isBest
+                              const isCurrent = index === 0
+                              const labelColor = isBest ? GREEN : isCurrent ? BLUE : "#555"
+                              return (
+                                <g key={index}>
+                                  {isBest && (
+                                    <circle cx={cx} cy={cy} r={16} fill="none" stroke={GREEN} strokeWidth={2} opacity={0.45} />
+                                  )}
+                                  <circle
+                                    cx={cx} cy={cy}
+                                    r={isBest || isCurrent ? 7 : 4}
+                                    fill={isCurrent && !isBest ? "transparent" : isBest ? GREEN : "white"}
+                                    stroke={isBest ? GREEN : isCurrent ? BLUE : SUBTLE}
+                                    strokeWidth={isBest || isCurrent ? 2.5 : 1.5}
+                                  />
+                                  <text
+                                    x={cx} y={cy - (isBest ? 28 : 18)}
+                                    textAnchor="middle" fontSize="12" fontWeight="700"
+                                    fill={labelColor}
+                                  >
+                                    {d.rate}%
+                                  </text>
+                                </g>
+                              )
+                            }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+
+                      {/* Footer summary */}
+                      <Flex
+                        align="center" gap={2} flexWrap="wrap"
+                        mt={4} pt={4} borderTop={`1px solid ${BORDER}`}
+                      >
+                        <Box w="14px" h="14px" borderRadius="3px" bg={GREEN} flexShrink={0} />
+                        <Text fontSize="sm" color={PRIMARY} lineHeight="1.6">
+                          Leaving at{" "}
+                          <Text as="span" color={BLUE} fontWeight="700">{currentSlot?.time_label}</Text>
+                          {" "}gives you a{" "}
+                          <Text as="span" color={AMBER} fontWeight="700">
+                            {Math.round((currentSlot?.cancel_risk ?? 0) * 100)}% cancellation rate
+                          </Text>
+                          {bestSlot && bestSlot.time_label !== currentSlot?.time_label && (
+                            <>
+                              {" "}· Best window today is{" "}
+                              <Text as="span" color={GREEN} fontWeight="700">{bestSlot.time_label}</Text>
+                              {" "}at just {Math.round(bestSlot.cancel_risk * 100)}%.
+                            </>
+                          )}
+                          {bestSlot && bestSlot.time_label === currentSlot?.time_label && (
+                            <> · You're already at the best time to leave!</>
+                          )}
                         </Text>
-                      </Box>
-                    )}
-                  </>
-                ) : null}
-              </Card>
+                      </Flex>
+                    </>
+                  )
+                })() : null}
+              </Box>
 
               {/* ── Nearest Transit Stops ── */}
               <Card>
