@@ -1,5 +1,9 @@
 """
 Commute API — weekly commute plan with holiday detection and weather forecast.
+Single endpoint, no auth required.
+
+Routes API called once per request — distance reused across all 7 days.
+Surge applied per-day based on day_of_week and live weather.
 """
 
 from datetime import date, timedelta
@@ -16,6 +20,7 @@ from app.services import weather as weather_svc
 from app.services import transport as transport_svc
 from app.services.cost import haversine_km
 from app.core.config import settings
+from app.services.routes_service import get_road_distance
 
 router = APIRouter(tags=["commute"])
 
@@ -34,6 +39,7 @@ class WeeklyPlanRequest(BaseModel):
     passengers: int = Field(default=1, ge=1, le=6)
     departure_time: str = Field(..., description="HH:MM — daily departure time")
     round_trip: bool = Field(default=False)
+    is_festival: bool = Field(default=False)
 
 
 class DayPlan(BaseModel):
@@ -42,6 +48,9 @@ class DayPlan(BaseModel):
     recommended_mode: str
     variant: str | None
     cost_inr: float
+    cost_min_inr: float
+    cost_max_inr: float
+    cost_display: str
     surge_multiplier: float
     time_min: int
     risk_level: str
@@ -152,9 +161,7 @@ def _weather_code_to_desc(code: int) -> str:
 # ── Helpers ───────────────────────────────────────────────────
 
 def _mode_label(mode: str, variant: str | None) -> str:
-    if mode == "cab" and variant:
-        return f"cab_{variant}"
-    return mode
+    return f"cab_{variant}" if mode == "cab" and variant else mode
 
 
 def _pick_best_mode(costs: list, risk_level: str, is_festival: bool, is_raining: bool) -> Any:
@@ -204,9 +211,9 @@ def _is_metro_operating(hour: int) -> bool:
 @router.post("/weekly-plan", response_model=WeeklyPlanResponse)
 def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
     try:
-        dep_hour, dep_minute = map(int, body.departure_time.split(":"))
+        dep_hour, _ = map(int, body.departure_time.split(":"))
     except ValueError:
-        dep_hour, dep_minute = 8, 0
+        dep_hour = 8
 
     today = date.today()
     end_date = today + timedelta(days=6)
@@ -232,11 +239,14 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
     # Fallback to live weather for today if forecast fails
     live_wx = weather_svc.get_weather()
 
-    distance_km = haversine_km(
-        body.origin_lat, body.origin_lon, body.dest_lat, body.dest_lon
+    # Routes API called once — distance doesn't change across days
+    distance_km, _ = get_road_distance(
+        body.origin_lat, body.origin_lon,
+        body.dest_lat, body.dest_lon,
     )
 
     plan: list[DayPlan] = []
+    multiplier = 2 if body.round_trip else 1
 
     for offset in range(7):
         day = today + timedelta(days=offset)
@@ -253,10 +263,12 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
             is_raining = wx_day["is_raining"]
             weather_desc = wx_day["desc"]
             weather_code = wx_day["code"]
+            precipitation_mm = 5.0 if is_raining else 0.0
         else:
             is_raining = live_wx.is_raining
             weather_desc = "Rainy" if live_wx.is_raining else "Clear"
             weather_code = 61 if live_wx.is_raining else 0
+            precipitation_mm = getattr(live_wx, "precipitation_mm", 0.0)
 
         demand_info = demand_svc.get_demand_for_location(
             session, body.origin_lat, body.origin_lon, dep_hour, dow
@@ -268,7 +280,9 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
             effective_risk = "moderate"
 
         all_costs = cost_svc.calculate_all_costs(
-            distance_km, dep_hour, is_raining, dow, body.passengers
+            distance_km, dep_hour, is_raining, dow, body.passengers,
+            precipitation_mm=precipitation_mm,
+            is_festival=is_festival,
         )
 
         # Filter out modes that aren't actually accessible from this origin
@@ -284,8 +298,8 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
         best = _pick_best_mode(costs_to_use, effective_risk, is_festival, is_raining)
         cab_cost = _get_cab_cost(all_costs)  # always use unfiltered for cab baseline
 
-        day_cost = best.final_cost_inr * (2 if body.round_trip else 1)
-        day_cab_cost = cab_cost * (2 if body.round_trip else 1)
+        day_cost = best.final_cost_inr * multiplier
+        day_cab_cost = cab_cost * multiplier
         savings = round(day_cab_cost - day_cost, 2) if day_cab_cost > day_cost else 0.0
 
         plan.append(DayPlan(
@@ -294,6 +308,9 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
             recommended_mode=_mode_label(best.mode, best.variant),
             variant=best.variant,
             cost_inr=round(day_cost, 2),
+            cost_min_inr=round(best.cost_min_inr * multiplier, 2),
+            cost_max_inr=round(best.cost_max_inr * multiplier, 2),
+            cost_display=f"₹{round(best.cost_min_inr * multiplier)}–₹{round(best.cost_max_inr * multiplier)}",
             surge_multiplier=best.surge_multiplier,
             time_min=best.time_min,
             risk_level=effective_risk,

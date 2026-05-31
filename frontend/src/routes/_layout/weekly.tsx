@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Box,
@@ -17,7 +17,6 @@ import { Field } from "@/components/ui/field"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type WeeklyPlanRequest, getWeeklyPlan } from "@/lib/api"
 import { Autocomplete, useJsApiLoader } from "@react-google-maps/api"
-import { useRef } from "react"
 
 export const Route = createFileRoute("/_layout/weekly")({
   component: WeeklyPage,
@@ -25,7 +24,6 @@ export const Route = createFileRoute("/_layout/weekly")({
 
 const LIBRARIES: ("places")[] = ["places"]
 
-// ── Theme tokens (matches dashboard) ──
 const PAGE_BG = "#f0f4f8"
 const CARD = "#ffffff"
 const CARD_SHADOW = "0 4px 16px rgba(0,0,0,0.08)"
@@ -116,7 +114,6 @@ function WeeklyPage() {
     libraries: LIBRARIES,
   })
 
-  // Load recent route from dashboard localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem("tripData")
@@ -355,7 +352,6 @@ function WeeklyPage() {
                 <CardLabel>7-Day Plan</CardLabel>
                 <Box overflowX="auto">
                   <Box minW="700px">
-                    {/* Header */}
                     <Grid templateColumns="90px 80px 40px 1fr 75px 60px 80px 80px" gap={3} px={4} py={2} fontSize="0.6rem" fontWeight="700" color={MUTED} letterSpacing="1px" textTransform="uppercase" borderBottom={`1px solid ${BORDER}`}>
                       <Text>Day</Text>
                       <Text>Date</Text>
@@ -377,7 +373,6 @@ function WeeklyPage() {
                         _hover={{ bg: INPUT_BG }}
                         transition="background 0.15s"
                       >
-                        {/* Day */}
                         <Flex align="center" gap={2}>
                           <Text fontSize="lg">{getModeEmoji(day.recommended_mode)}</Text>
                           <Box>
@@ -388,15 +383,12 @@ function WeeklyPage() {
                           </Box>
                         </Flex>
 
-                        {/* Date */}
                         <Text fontSize="xs" color={MUTED}>{day.date.slice(5)}</Text>
 
-                        {/* Weather */}
                         <Text fontSize="lg" title={day.weather_desc}>
                           {getWeatherEmoji(day.weather_code, day.is_raining)}
                         </Text>
 
-                        {/* Mode + reason */}
                         <Box>
                           <Text fontSize="sm" fontWeight="600" color={PRIMARY} textTransform="capitalize">
                             {day.recommended_mode.replace("_", " ")}
@@ -408,20 +400,16 @@ function WeeklyPage() {
                           )}
                         </Box>
 
-                        {/* Cost */}
                         <Text textAlign="right" fontWeight="700" fontSize="sm" color={day === cheapestDay ? GREEN : PRIMARY}>
                           ₹{Math.round(day.cost_inr)}
                         </Text>
 
-                        {/* Time */}
                         <Text textAlign="right" fontSize="xs" color={MUTED}>{day.time_min}m</Text>
 
-                        {/* Savings */}
                         <Text textAlign="right" fontSize="xs" color={day.savings_vs_cab > 0 ? GREEN : SUBTLE} fontWeight={day.savings_vs_cab > 0 ? "700" : "400"}>
                           {day.savings_vs_cab > 0 ? `+₹${Math.round(day.savings_vs_cab)}` : "—"}
                         </Text>
 
-                        {/* Risk */}
                         <Flex justify="center">
                           <Box px={2} py={0.5} borderRadius="full" bg={getRiskBg(day.risk_level)} color={getRiskTextColor(day.risk_level)} fontSize="0.62rem" fontWeight="700" textTransform="uppercase">
                             {day.risk_level}

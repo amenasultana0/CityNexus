@@ -1,5 +1,7 @@
 import { useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import TripPlannerModal from "@/components/Common/TripPlannerModal"
+import { buildUberUrl, buildOlaUrl } from "@/utils/uberDeepLink"
 import {
   Badge,
   Box,
@@ -34,7 +36,6 @@ import {
 } from "@/lib/api"
 import { Autocomplete, useJsApiLoader } from "@react-google-maps/api"
 
-// Passes selected hour so backend can filter timetable to relevant window
 async function getBusStopSchedule(stopName: string, hour?: number) {
   const params = new URLSearchParams({ stop_name: stopName })
   if (hour !== undefined) params.append("hour", String(hour))
@@ -171,6 +172,7 @@ function Dashboard() {
   const [destText, setDestText] = useState("")
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [destLocation, setDestLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [plannerOpen, setPlannerOpen] = useState(false)
   const pickupRef = useRef<google.maps.places.Autocomplete | null>(null)
   const destRef = useRef<google.maps.places.Autocomplete | null>(null)
 
@@ -335,7 +337,7 @@ function Dashboard() {
         <VStack gap={5} align="stretch">
           {/* ── Route Input ── */}
           <Card>
-            <Grid templateColumns={{ base: "1fr", md: "1fr 1fr 80px 120px auto" }} gap={4} alignItems="end">
+            <Grid templateColumns={{ base: "1fr", md: "1fr 1fr 80px 120px auto auto" }} gap={4} alignItems="end">
               <Field label="PICKUP">
                 {isLoaded && (
                   <Autocomplete onLoad={(a) => (pickupRef.current = a)} onPlaceChanged={onPickupPlaceChanged}>
@@ -358,6 +360,9 @@ function Dashboard() {
               </Field>
               <UIButton onClick={handleSubmit} loading={isGeocoding} size="lg" mt={4} style={{ background: BLUE, color: "#ffffff", fontWeight: "600", borderRadius: "8px", padding: "12px 24px" }}>
                 Analyse My Trip
+              </UIButton>
+              <UIButton onClick={() => setPlannerOpen(true)} size="lg" mt={4} style={{ background: "transparent", color: TEAL, border: `1px solid ${TEAL}`, fontWeight: "600", borderRadius: "8px", padding: "12px 24px" }}>
+                Plan Trip →
               </UIButton>
             </Grid>
             {geoError && <Text color={RED} mt={2} fontSize="sm">{geoError}</Text>}
@@ -451,11 +456,44 @@ function Dashboard() {
                         <Badge colorPalette={getRiskColorPalette(bestOption.risk_level) as any} variant="outline">{bestOption.risk_level} risk</Badge>
                       </Flex>
                       <Text color={MUTED} fontSize="sm">{bestOption.reason}</Text>
+                      {bestOption.mode !== "metro" && bestOption.mode !== "bus" && formData && (
+                        <Flex gap={2} mt={3}>
+                          <Button
+                            size="sm"
+                            onClick={() => window.open(buildUberUrl(
+                              { lat: formData.originLat, lng: formData.originLon, name: pickupText || "Pickup" },
+                              { lat: formData.destLat, lng: formData.destLon, name: destText || "Destination" }
+                            ), "_blank")}
+                            style={{ background: "#000000", color: "#ffffff", fontWeight: "600", borderRadius: "8px", padding: "6px 14px", fontSize: "0.75rem" }}
+                          >
+                            Book on Uber
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => window.open(buildOlaUrl(
+                              { lat: formData.originLat, lng: formData.originLon, name: pickupText || "Pickup" },
+                              { lat: formData.destLat, lng: formData.destLon, name: destText || "Destination" }
+                            ), "_blank")}
+                            style={{ background: "#16a34a", color: "#ffffff", fontWeight: "600", borderRadius: "8px", padding: "6px 14px", fontSize: "0.75rem" }}
+                          >
+                            Book on Ola
+                          </Button>
+                        </Flex>
+                      )}
                     </Box>
                     <Flex gap={5} textAlign="center">
-                      <Box><Text fontSize="xl" fontWeight="700" color={TEAL}>₹{Math.round(bestOption.cost_inr)}</Text><Text fontSize="xs" color={SUBTLE}>Cost</Text></Box>
-                      <Box><Text fontSize="xl" fontWeight="700" color={PRIMARY}>{bestOption.time_min} min</Text><Text fontSize="xs" color={SUBTLE}>Time</Text></Box>
-                      <Box><Text fontSize="xl" fontWeight="700" color={PRIMARY}>{bestOption.reliability_score}/10</Text><Text fontSize="xs" color={SUBTLE}>Reliability</Text></Box>
+                      <Box>
+                        <Text fontSize="xl" fontWeight="700" color={TEAL}>{bestOption.cost_display}</Text>
+                        <Text fontSize="xs" color={SUBTLE}>Cost</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="xl" fontWeight="700" color={PRIMARY}>{bestOption.time_min} min</Text>
+                        <Text fontSize="xs" color={SUBTLE}>Time</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="xl" fontWeight="700" color={PRIMARY}>{bestOption.reliability_score}/10</Text>
+                        <Text fontSize="xs" color={SUBTLE}>Reliability</Text>
+                      </Box>
                     </Flex>
                   </Flex>
                 ) : <Text color={MUTED}>No transport options available</Text>}
@@ -608,7 +646,7 @@ function Dashboard() {
                                 <Text fontSize="xs" color={MUTED}>{opt.reason}</Text>
                               </Box>
                               <Box textAlign="right" flexShrink={0}>
-                                <Text fontWeight="700" fontSize="md" color={isUnavailable ? MUTED : PRIMARY}>₹{Math.round(opt.cost_inr)}</Text>
+                                <Text fontWeight="700" fontSize="md" color={isUnavailable ? MUTED : PRIMARY}>{opt.cost_display}</Text>
                                 <Text fontSize="xs" color={MUTED}>{opt.time_min} min · {opt.reliability_score}/10</Text>
                               </Box>
                             </Flex>
@@ -715,12 +753,7 @@ function Dashboard() {
                       {scheduleData.routes.map((route, i) => (
                         <Flex key={i} align="center" justify="space-between" p={3} bg={INPUT_BG} borderRadius="8px" border={`1px solid ${BORDER}`}>
                           <Flex align="center" gap={3}>
-                            <Box
-                              px={2} py={1} borderRadius="4px"
-                              bg={i % 2 === 0 ? "#E1F5EE" : "#E6F1FB"}
-                              color={i % 2 === 0 ? "#0F6E56" : "#185FA5"}
-                              fontSize="xs" fontWeight="700" minW="32px" textAlign="center"
-                            >
+                            <Box px={2} py={1} borderRadius="4px" bg={i % 2 === 0 ? "#E1F5EE" : "#E6F1FB"} color={i % 2 === 0 ? "#0F6E56" : "#185FA5"} fontSize="xs" fontWeight="700" minW="32px" textAlign="center">
                               {route.route_name}
                             </Box>
                             <Text fontWeight="600" fontSize="sm" color={PRIMARY}>{route.destination}</Text>
@@ -741,6 +774,17 @@ function Dashboard() {
           </Portal>
         </Dialog.Root>
       </Container>
+
+      <TripPlannerModal
+        isOpen={plannerOpen}
+        onClose={() => setPlannerOpen(false)}
+        initialOrigin={pickupText}
+        initialDest={destText}
+        initialOriginLat={formData?.originLat}
+        initialOriginLon={formData?.originLon}
+        initialDestLat={formData?.destLat}
+        initialDestLon={formData?.destLon}
+      />
     </Box>
   )
 }
