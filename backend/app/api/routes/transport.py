@@ -327,13 +327,13 @@ def optimal_pickup(body: dict, session: SessionDep) -> Any:
     radius_km = radius_m / 1000.0
 
     metro_stops = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="metro", radius_km=radius_km, max_count=3
+        session, origin_lat, origin_lon, stop_type="metro", radius_km=1.5, max_count=3
     )
     mmts_stops = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="mmts", radius_km=radius_km, max_count=2
+        session, origin_lat, origin_lon, stop_type="mmts", radius_km=1.5, max_count=2
     )
     bus_stops = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="bus", radius_km=radius_km, max_count=5
+        session, origin_lat, origin_lon, stop_type="bus", radius_km=max(radius_km, 0.8), max_count=5
     )
     stops = metro_stops + mmts_stops + bus_stops
     suggestions: list[PickupSuggestion] = []

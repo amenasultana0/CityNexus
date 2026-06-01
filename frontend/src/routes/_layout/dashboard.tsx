@@ -423,6 +423,10 @@ function Dashboard() {
           background: rgba(255,255,255,0.82) !important;
           transform: translateX(4px);
         }
+        @keyframes transitStopIn {
+          from { opacity: 0; transform: translateX(-12px); }
+          to   { opacity: 1; transform: translateX(0);     }
+        }
       `}</style>
       <Container maxW="full" p={6}>
         <VStack gap={5} align="stretch">
@@ -1139,36 +1143,90 @@ function Dashboard() {
               </Box>
 
               {/* ── Nearest Transit Stops ── */}
-              <Card>
-                <CardLabel>Nearest Transit Stops</CardLabel>
-                {pickupQuery.isLoading ? <Skeleton h="120px" /> : pickupQuery.isError ? <ErrorCard message="Could not load data — check backend connection" onRetry={() => pickupQuery.refetch()} /> : pickupQuery.data?.suggestions.length ? (
-                  <VStack gap={2} align="stretch">
-                    {pickupQuery.data.suggestions.slice(0, 5).map((stop, i) => (
-                      <Flex key={i} align="center" gap={4} p={3} bg={INPUT_BG} borderRadius="10px" border={`1px solid ${BORDER}`} cursor="pointer" _hover={{ bg: BORDER }} transition="background 0.15s"
-                        onClick={async () => {
-                          setSelectedStop(stop)
-                          setIsLoadingSchedule(true)
-                          try {
-                            const data = await getBusStopSchedule(stop.name, formData?.hour)
-                            setScheduleData(data)
-                          } catch (err) {
-                            console.error(err)
-                            setScheduleData({ error: "Failed to load schedule" })
-                          }
-                          setIsLoadingSchedule(false)
-                        }}
-                      >
-                        <Text fontSize="xl">{stop.stop_type === "metro" ? "🚇" : stop.stop_type === "mmts" ? "🚂" : "🚌"}</Text>
-                        <Box flex="1">
-                          <Text fontWeight="600" color={PRIMARY} fontSize="sm">{stop.name}</Text>
-                          <Text fontSize="xs" color={MUTED}>{stop.distance_m}m away · {stop.walk_min} min walk</Text>
-                        </Box>
-                        <Box display="inline-block" px={2} py={0.5} borderRadius="full" bg="#e6fffa" color={TEAL} fontSize="0.7rem" fontWeight="700">↓{stop.risk_reduction_pct}% risk</Box>
-                      </Flex>
-                    ))}
-                  </VStack>
-                ) : <Text color={MUTED} fontSize="sm">No transit stops found nearby</Text>}
-              </Card>
+              <Box bg={CARD} borderRadius="20px" p={5} boxShadow="0 2px 20px rgba(0,0,0,0.06)" style={{ border: "1px solid rgba(226,232,240,0.7)" }}>
+                <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={4}>Nearest Transit Stops</Text>
+                {pickupQuery.isLoading ? (
+                  <Skeleton h="120px" />
+                ) : pickupQuery.isError ? (
+                  <ErrorCard message="Could not load data — check backend connection" onRetry={() => pickupQuery.refetch()} />
+                ) : (() => {
+                  const allStops = pickupQuery.data?.suggestions ?? []
+                  const railStops = allStops.filter((s: any) => s.stop_type === "metro" || s.stop_type === "mmts").slice(0, 3)
+                  const busStops = allStops.filter((s: any) => s.stop_type === "bus").slice(0, 3)
+                  return (
+                    <VStack gap={4} align="stretch">
+                      <Box>
+                        <Flex align="center" gap={2} mb={2}>
+                          <Box w="2.5px" h="13px" borderRadius="2px" style={{ background: "linear-gradient(to bottom, #0694a2, #1a56db)" }} />
+                          <Text fontSize="0.7rem" fontWeight="700" color={TEAL} letterSpacing="0.5px">Metro & MMTS Rail</Text>
+                        </Flex>
+                        {railStops.length > 0 ? (
+                          <VStack gap={2} align="stretch">
+                            {railStops.map((stop: any, i: number) => (
+                              <Flex key={i} align="center" gap={3} p={3} borderRadius="12px"
+                                style={{ background: "linear-gradient(135deg,#e6fffa 0%,#ebf8ff 100%)", borderLeft: "3px solid #0694a2", animation: `transitStopIn 0.4s ${i * 0.08}s both` }}
+                              >
+                                <Text fontSize="xl">{stop.stop_type === "metro" ? "🚇" : "🚂"}</Text>
+                                <Box flex="1">
+                                  <Text fontWeight="600" color={PRIMARY} fontSize="sm">{stop.name}</Text>
+                                  <Text fontSize="xs" color={MUTED}>{stop.distance_m}m away · {stop.walk_min} min walk</Text>
+                                </Box>
+                                <Box px={2} py={0.5} borderRadius="full" bg="rgba(6,148,162,0.12)" color={TEAL} fontSize="0.68rem" fontWeight="700">↓{stop.risk_reduction_pct}%</Box>
+                              </Flex>
+                            ))}
+                          </VStack>
+                        ) : (
+                          <Flex align="center" gap={2} p={3} borderRadius="10px" bg={INPUT_BG}>
+                            <Text>🚫</Text>
+                            <Text fontSize="sm" color={MUTED}>No metro stations within 1.5 km</Text>
+                          </Flex>
+                        )}
+                      </Box>
+                      <Box>
+                        <Flex align="center" gap={2} mb={2}>
+                          <Box w="2.5px" h="13px" borderRadius="2px" style={{ background: "linear-gradient(to bottom, #7c3aed, #ec4899)" }} />
+                          <Text fontSize="0.7rem" fontWeight="700" color="#7c3aed" letterSpacing="0.5px">Bus Stops</Text>
+                        </Flex>
+                        {busStops.length > 0 ? (
+                          <VStack gap={2} align="stretch">
+                            {busStops.map((stop: any, i: number) => (
+                              <Flex key={i} align="center" gap={3} p={3} borderRadius="12px" cursor="pointer"
+                                transition="transform 0.18s ease"
+                                _hover={{ transform: "translateX(3px)" }}
+                                style={{ background: "linear-gradient(135deg,#f5f3ff 0%,#fdf4ff 100%)", borderLeft: "3px solid #7c3aed", animation: `transitStopIn 0.4s ${(railStops.length + i) * 0.08 + 0.1}s both` }}
+                                onClick={async () => {
+                                  setSelectedStop(stop)
+                                  setIsLoadingSchedule(true)
+                                  try {
+                                    const data = await getBusStopSchedule(stop.name, formData?.hour)
+                                    setScheduleData(data)
+                                  } catch (err) {
+                                    console.error(err)
+                                    setScheduleData({ error: "Failed to load schedule" })
+                                  }
+                                  setIsLoadingSchedule(false)
+                                }}
+                              >
+                                <Text fontSize="xl">🚌</Text>
+                                <Box flex="1">
+                                  <Text fontWeight="600" color={PRIMARY} fontSize="sm">{stop.name}</Text>
+                                  <Text fontSize="xs" color={MUTED}>{stop.distance_m}m away · {stop.walk_min} min walk</Text>
+                                </Box>
+                                <Box px={2} py={0.5} borderRadius="full" bg="rgba(124,58,237,0.1)" color="#7c3aed" fontSize="0.68rem" fontWeight="700">↓{stop.risk_reduction_pct}%</Box>
+                              </Flex>
+                            ))}
+                          </VStack>
+                        ) : (
+                          <Flex align="center" gap={2} p={3} borderRadius="10px" bg={INPUT_BG}>
+                            <Text>🚫</Text>
+                            <Text fontSize="sm" color={MUTED}>No bus stops found nearby</Text>
+                          </Flex>
+                        )}
+                      </Box>
+                    </VStack>
+                  )
+                })()}
+              </Box>
             </>
           )}
         </VStack>
