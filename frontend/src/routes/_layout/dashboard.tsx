@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query"
 import TripPlannerModal from "@/components/Common/TripPlannerModal"
 import { buildUberUrl, buildOlaUrl } from "@/utils/uberDeepLink"
 import {
-  Badge,
   Box,
   Container,
   Flex,
@@ -121,9 +120,6 @@ function getRiskBorderColor(level: string) {
 }
 function getRiskTextColor(level: string) {
   return level === "low" ? GREEN : level === "moderate" ? AMBER : RED
-}
-function getRiskColorPalette(level: string) {
-  return level === "low" ? "green" : level === "moderate" ? "yellow" : "red"
 }
 
 function Card({ children, topColor, p = 6 }: { children: React.ReactNode; topColor?: string; p?: number }) {

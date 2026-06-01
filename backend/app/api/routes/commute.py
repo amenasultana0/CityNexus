@@ -38,7 +38,6 @@ class WeeklyPlanRequest(BaseModel):
     passengers: int = Field(default=1, ge=1, le=6)
     departure_time: str = Field(..., description="HH:MM — daily departure time")
     round_trip: bool = Field(default=False)
-    is_festival: bool = Field(default=False)
 
 
 class DayPlan(BaseModel):
@@ -59,16 +58,16 @@ class DayPlan(BaseModel):
     weather_desc: str = "Clear"
     weather_code: int = 0
     is_raining: bool = False
-    cab_cost_inr: float = 0.0
-    savings_vs_cab: float = 0.0
+    is_surge_day: bool = False
+    best_departure_hour: int | None = None
+    best_departure_label: str | None = None
 
 
 class WeeklyPlanResponse(BaseModel):
     weekly_plan: list[DayPlan]
     cheapest_mode: str
     total_estimated_cost_inr: float
-    total_cab_cost_inr: float
-    total_savings_inr: float
+    total_time_min: int
 
 
 # ── Holiday fetcher ───────────────────────────────────────────
@@ -133,6 +132,7 @@ def _fetch_weather_forecast(lat: float, lon: float, days: int = 7) -> list[dict]
                 "code": code,
                 "is_raining": code >= 51 or (rain is not None and rain > 1.0),
                 "desc": _weather_code_to_desc(code),
+                "precipitation_mm": float(rain) if rain else 0.0,
             })
         return result
     except Exception:
@@ -163,12 +163,34 @@ def _mode_label(mode: str, variant: str | None) -> str:
     return f"cab_{variant}" if mode == "cab" and variant else mode
 
 
+def _is_peak_hour(hour: int, dow: int) -> bool:
+    if dow >= 5:
+        return False
+    return (7 <= hour < 10) or (18 <= hour < 21)
+
+
+def _best_departure(dep_hour: int, dow: int) -> tuple[int | None, str | None]:
+    """
+    If departure is during peak, suggest the nearest off-peak hour.
+    Returns (suggested_hour, label) or (None, None) if already off-peak.
+    """
+    if dow >= 5:
+        return None, None
+    if 7 <= dep_hour < 10:
+        return 6, "Leave by 6:30am to beat morning peak"
+    if dep_hour == 10:
+        return 11, "10am is shoulder peak — 11am is cheaper"
+    if 18 <= dep_hour < 21:
+        return 17, "Leave before 6pm to avoid evening surge"
+    return None, None
+
+
 def _pick_best_mode(costs: list, risk_level: str, is_festival: bool, is_raining: bool) -> Any:
     available = [c for c in costs if c.available]
     if not available:
         return costs[0]
 
-    if is_festival or risk_level == "high" or is_raining:
+    if is_festival or is_raining:
         fixed = [c for c in available if c.mode in {"metro", "bus"}]
         if fixed:
             return min(fixed, key=lambda c: c.time_min)
@@ -261,7 +283,7 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
             is_raining = wx_day["is_raining"]
             weather_desc = wx_day["desc"]
             weather_code = wx_day["code"]
-            precipitation_mm = 5.0 if is_raining else 0.0
+            precipitation_mm = wx_day["precipitation_mm"]
         else:
             is_raining = live_wx.is_raining
             weather_desc = "Rainy" if live_wx.is_raining else "Clear"
@@ -289,16 +311,18 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
             if not (c.mode == "metro" and not metro_accessible)
             and not (c.mode == "bus" and not bus_accessible)
         ]
-
-        # Fall back to all costs if filtering removes everything
         costs_to_use = filtered_costs if filtered_costs else all_costs
 
         best = _pick_best_mode(costs_to_use, effective_risk, is_festival, is_raining)
-        cab_cost = _get_cab_cost(all_costs)  # always use unfiltered for cab baseline
 
         day_cost = best.final_cost_inr * multiplier
-        day_cab_cost = cab_cost * multiplier
-        savings = round(day_cab_cost - day_cost, 2) if day_cab_cost > day_cost else 0.0
+
+        # Surge detection — is any available road mode surging?
+        road_costs = [c for c in costs_to_use if c.available and c.mode not in {"metro", "bus"}]
+        is_surge_day = any(c.surge_multiplier > 1.0 for c in road_costs) or is_festival
+
+        # Best departure window
+        best_dep_hour, best_dep_label = _best_departure(dep_hour, dow)
 
         plan.append(DayPlan(
             date=date_str,
@@ -318,13 +342,13 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
             weather_desc=weather_desc,
             weather_code=weather_code,
             is_raining=is_raining,
-            cab_cost_inr=round(day_cab_cost, 2),
-            savings_vs_cab=savings,
+            is_surge_day=is_surge_day,
+            best_departure_hour=best_dep_hour,
+            best_departure_label=best_dep_label,
         ))
 
     total_cost = round(sum(d.cost_inr for d in plan), 2)
-    total_cab = round(sum(d.cab_cost_inr for d in plan), 2)
-    total_savings = round(total_cab - total_cost, 2) if total_cab > total_cost else 0.0
+    total_time = sum(d.time_min for d in plan)
 
     mode_counts: dict[str, int] = {}
     for d in plan:
@@ -335,6 +359,5 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
         weekly_plan=plan,
         cheapest_mode=cheapest_mode,
         total_estimated_cost_inr=total_cost,
-        total_cab_cost_inr=total_cab,
-        total_savings_inr=total_savings,
+        total_time_min=total_time,
     )

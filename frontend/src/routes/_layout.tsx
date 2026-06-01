@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { label: "Home",           to: "/dashboard" },
   { label: "Heatmap",        to: "/heatmap" },
   { label: "Weekly Commute", to: "/weekly" },
-  { label: "Community",      to: "/dashboard" },
+  { label: "Community",      to: "/community" },
   { label: "Model Insights", to: "/insights" },
 ]
 

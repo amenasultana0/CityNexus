@@ -144,6 +144,7 @@ services:
       context: ./frontend
       args:
         - VITE_API_URL=https://api.${DOMAIN?Variable not set}
+        - VITE_GOOGLE_MAPS_KEY=${GOOGLE_MAPS_FRONTEND_KEY}
         - NODE_ENV=production
     labels:
       - traefik.enable=true

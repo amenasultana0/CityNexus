@@ -8,6 +8,7 @@ import {
   FiBarChart2,
   FiSettings,
   FiUsers,
+  FiAlertTriangle,
 } from "react-icons/fi"
 import type { IconType } from "react-icons/lib"
 
@@ -20,6 +21,7 @@ const mainItems = [
   { icon: FiMap, title: "City Heatmap", path: "/heatmap" },
   { icon: FiCalendar, title: "Weekly Commute", path: "/weekly" },
   { icon: FiBarChart2, title: "Model Insights", path: "/insights" },
+  { icon: FiAlertTriangle, title: "Community", path: "/community" },
 ]
 
 interface SidebarItemsProps {

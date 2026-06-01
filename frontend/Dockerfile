@@ -10,6 +10,7 @@ RUN npm install
 COPY ./ /app/
 
 ARG VITE_API_URL=${VITE_API_URL}
+ARG VITE_GOOGLE_MAPS_KEY=${VITE_GOOGLE_MAPS_KEY}
 
 RUN npm run build
 
