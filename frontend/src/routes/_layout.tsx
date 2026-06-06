@@ -16,19 +16,29 @@ const NAV_ITEMS = [
   { label: "Model Insights", to: "/insights" },
 ]
 
+function weatherEmoji(code: number): string {
+  if (code === 0) return "☀️"
+  if (code <= 3) return "⛅"
+  if (code <= 48) return "🌫️"
+  if (code <= 67) return "🌧️"
+  if (code <= 82) return "🌦️"
+  return "⛈️"
+}
+
 function Layout() {
   const [dark, setDark] = useState(false)
-  const [clockStr, setClockStr] = useState(() =>
-    new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
-  )
+  const [weatherStr, setWeatherStr] = useState("")
   const navigate = useNavigate()
   const { logout } = useAuth()
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setClockStr(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }))
-    }, 1000)
-    return () => clearInterval(id)
+    fetch("/api/v1/weather/impact")
+      .then((r) => r.json())
+      .then((d) => {
+        const emoji = weatherEmoji(d.weather_code ?? 0)
+        setWeatherStr(`${emoji} ${Math.round(d.temperature_c)}°C · ${d.conditions}`)
+      })
+      .catch(() => {})
   }, [])
 
   const BG       = dark ? "#0a1628" : "#f8faff"
@@ -89,20 +99,22 @@ function Layout() {
           ))}
         </Flex>
 
-        {/* Right — clock, dark mode, settings, avatar, logout */}
+        {/* Right — weather, dark mode, settings, avatar, logout */}
         <Flex align="center" gap={2}>
-          <Text
-            fontSize="sm"
-            fontWeight="600"
-            color={TEXT}
-            px={3}
-            py={1}
-            borderRadius="8px"
-            bg={ICON_BG}
-            style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em" }}
-          >
-            {clockStr}
-          </Text>
+          {weatherStr && (
+            <Text
+              fontSize="sm"
+              fontWeight="600"
+              color={TEXT}
+              px={3}
+              py={1}
+              borderRadius="8px"
+              bg={ICON_BG}
+              style={{ letterSpacing: "0.01em" }}
+            >
+              {weatherStr}
+            </Text>
+          )}
           {/* Dark / Light toggle */}
           <Box
             as="button"

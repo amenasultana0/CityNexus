@@ -138,7 +138,7 @@ def _make_range(mid: float, surge: float, mode: str) -> tuple[float, float, str]
 
 # ── Fare base formulas (verified Uber Hyderabad May 2025) ─────
 def _auto_base(d: float) -> float:
-    return 68.0 if d <= 1.5 else 68.0 + (d - 1.5) * 7.8
+    return 68.0 if d <= 1.5 else 68.0 + (d - 1.5) * 11.67
 
 def _bike_base(d: float) -> float:
     if d <= 1.5: return 30.0
@@ -146,7 +146,7 @@ def _bike_base(d: float) -> float:
     return 43.0 + (d - 1.9) * 6.4
 
 def _mini_base(d: float) -> float:
-    return 124.0 if d <= 4.0 else 124.0 + (d - 4.0) * 30.2
+    return 124.0 if d <= 4.0 else 124.0 + (d - 4.0) * 21.9
 
 def _sedan_base(d: float) -> float:
     return 243.0 if d <= 3.3 else 243.0 + (d - 3.3) * 13.4
@@ -157,9 +157,9 @@ def _suv_base(d: float) -> float:
     return 290.0 + (d - 4.0) * 19.0
 
 def _metro_fare(d: float) -> float:
-    for limit, fare in [(2,10),(5,15),(8,20),(12,25),(18,30),(26,35),(float("inf"),40)]:
+    for limit, fare in [(2,11),(4,17),(6,28),(9,37),(12,47),(15,51),(18,56),(21,61),(24,65),(float("inf"),69)]:
         if d <= limit: return float(fare)
-    return 40.0
+    return 69.0
 
 def _bus_fare(d: float) -> float:
     for limit, fare in [(5,10),(10,15),(20,20),(30,25),(float("inf"),30)]:
