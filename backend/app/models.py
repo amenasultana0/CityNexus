@@ -217,3 +217,16 @@ class BusRoute(SQLModel, table=True):
 
     timetable_json: str = Field(default="[]")
     stops_json: str = Field(default="[]")
+
+
+# ── Disruption Reporter ───────────────────────────────────────
+class DisruptionReport(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    lat: float
+    lon: float
+    category: str = Field(max_length=50)
+    description: str = Field(max_length=200)
+    location_name: str | None = Field(default=None, max_length=100)
+    reported_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    upvotes: int = Field(default=0)
+    is_active: bool = Field(default=True)

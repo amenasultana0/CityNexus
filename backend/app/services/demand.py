@@ -57,7 +57,8 @@ def get_demand_for_location(
     """
     # Step 1: find nearest named zone by coordinates
     area = _nearest_area_context(session, lat, lon)
-    risk_level = area.risk_level if area else "medium"
+    # Derive risk dynamically after we have the cancel_rate (done below)
+    _static_risk = area.risk_level if area else "medium" 
 
     # Step 2: find the HyderabadZone for this location using coordinate-based zone selection.
     # HyderabadZone has no lat/lon, so we use the nearest AreaContext's zone_name as a
@@ -95,13 +96,21 @@ def get_demand_for_location(
     # Demand score: bookings relative to supply (capped 0–1)
     demand_score = round(min(1.0, booking_count / max(1, driver_supply * 10)), 3)
 
+    # Derive risk from actual cancel_rate so it varies by time/location
+    if cancel_rate >= 0.55:
+        dynamic_risk = "high"
+    elif cancel_rate >= 0.35:
+        dynamic_risk = "moderate"
+    else:
+        dynamic_risk = "low"
+
     return DemandInfo(
         constituency_num=ac_num,
         cancel_rate=round(cancel_rate, 4),
         driver_supply=driver_supply,
         booking_count=booking_count,
         demand_score=demand_score,
-        risk_level=risk_level,
+        risk_level=dynamic_risk,
     )
 
 

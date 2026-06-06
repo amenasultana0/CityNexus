@@ -28,6 +28,8 @@ import json
 router = APIRouter(tags=["transport"])
 
 
+# ── Response models ───────────────────────────────────────────
+
 class StopDetails(BaseModel):
     board_at: str
     alight_at: str
@@ -98,6 +100,8 @@ class JourneyCostResponse(BaseModel):
     precipitation_mm: float
     costs: list[CostEntry]
 
+
+# ── Helpers ───────────────────────────────────────────────────
 
 def _reliability_score(cancel_rate: float) -> int:
     return max(1, min(10, round((1.0 - cancel_rate) * 10)))
@@ -171,13 +175,18 @@ def _mode_wait_min(mode: str, risk_level: str, hour: int, day_of_week: int, bus_
 
 
 def _build_time_breakdown(
-    mode: str, variant: str | None, distance_km: float,
-    hour: int, day_of_week: int, risk_level: str,
-    board_walk_m: int = 0, alight_walk_m: int = 0, bus_stop_count: int = 3,
+    mode: str,
+    variant: str | None,
+    distance_km: float,
+    hour: int,
+    day_of_week: int,
+    risk_level: str,
+    board_walk_m: int = 0,
+    alight_walk_m: int = 0,
+    bus_stop_count: int = 3,
     traffic_duration_min: float = 0,
 ) -> TimeBreakdown:
     mode_key = f"cab_{variant}" if mode == "cab" and variant else mode
-    # Use live traffic duration for road modes, formula for metro/bus
     if traffic_duration_min > 0 and mode not in ("metro", "bus"):
         travel = round(traffic_duration_min)
     else:
@@ -201,6 +210,8 @@ def _build_time_breakdown(
     )
 
 
+# ── Endpoints ─────────────────────────────────────────────────
+
 @router.get("/alternatives", response_model=AlternativesResponse)
 def transport_alternatives(
     session: SessionDep,
@@ -214,12 +225,11 @@ def transport_alternatives(
     is_raining: bool = Query(default=False),
     is_festival: bool = Query(default=False),
 ) -> Any:
-    # Real road distance
-    distance_km, traffic_duration_min = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
+    distance_km, traffic_duration_min = get_road_distance(
+        origin_lat, origin_lon, dest_lat, dest_lon
+    )
 
-    # Weather — get precipitation_mm for surge logic
     wx = weather_svc.get_weather()
-
     demand_info = demand_svc.get_demand_for_location(
         session, origin_lat, origin_lon, hour, day_of_week
     )
@@ -227,6 +237,7 @@ def transport_alternatives(
 
     area_ctx = demand_svc.get_area_context(session, origin_lat, origin_lon)
     bus_stop_count = area_ctx.bus_stop_count_1km if area_ctx else 3
+
     all_costs = cost_svc.calculate_all_costs(
         distance_km, hour, wx.is_raining, day_of_week, passengers,
         cancel_rate=demand_info.cancel_rate,
@@ -251,6 +262,7 @@ def transport_alternatives(
     metro_alight = transport_svc.nearest_stop_of_type(session, dest_lat, dest_lon, "metro")
     bus_board = transport_svc.nearest_stop_of_type(session, origin_lat, origin_lon, "bus")
     bus_alight = transport_svc.nearest_stop_of_type(session, dest_lat, dest_lon, "bus")
+
     options: list[TransportOption] = []
     for c in all_costs:
         if c.mode == "metro":
@@ -259,6 +271,7 @@ def transport_alternatives(
             mode_risk = "moderate"
         else:
             mode_risk = demand_info.risk_level
+
         board_walk_m = 0
         alight_walk_m = 0
         if c.mode == "metro":
@@ -267,6 +280,7 @@ def transport_alternatives(
         elif c.mode == "bus":
             if bus_board: board_walk_m = bus_board.distance_m
             if bus_alight: alight_walk_m = bus_alight.distance_m
+
         breakdown = _build_time_breakdown(
             mode=c.mode, variant=c.variant, distance_km=distance_km,
             hour=hour, day_of_week=day_of_week, risk_level=mode_risk,
@@ -274,6 +288,7 @@ def transport_alternatives(
             bus_stop_count=bus_stop_count,
             traffic_duration_min=traffic_duration_min,
         )
+
         stop_details: StopDetails | None = None
         if c.mode == "metro" and metro_board and metro_alight:
             stop_details = StopDetails(
@@ -285,6 +300,7 @@ def transport_alternatives(
                 board_at=f"{bus_board.name} ({bus_board.distance_m}m walk)",
                 alight_at=f"{bus_alight.name} ({bus_alight.distance_m}m walk)",
             )
+
         if c.mode == "metro" and not metro_accessible:
             available, reason = False, "No metro station within 1.5 km"
         elif c.mode == "metro" and not _is_metro_operating(hour):
@@ -296,8 +312,10 @@ def transport_alternatives(
         else:
             available = True
             reason = _reason(c.mode, c, demand_info.risk_level, hour, day_of_week)
+
         options.append(TransportOption(
-            mode=c.mode, variant=c.variant,
+            mode=c.mode,
+            variant=c.variant,
             time_min=breakdown.total_min if available else c.time_min,
             cost_inr=c.final_cost_inr,
             cost_min_inr=c.cost_min_inr,
@@ -316,6 +334,7 @@ def transport_alternatives(
             stop_details=stop_details if available else None,
             time_breakdown=breakdown if available else None,
         ))
+
     return AlternativesResponse(distance_km=round(distance_km, 2), options=options)
 
 
@@ -327,15 +346,16 @@ def optimal_pickup(body: dict, session: SessionDep) -> Any:
     radius_km = radius_m / 1000.0
 
     metro_stops = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="metro", radius_km=1.5, max_count=3
+        session, origin_lat, origin_lon, stop_type="metro", radius_km=max(radius_km, 1.5), max_count=3
     )
     mmts_stops = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="mmts", radius_km=1.5, max_count=2
+        session, origin_lat, origin_lon, stop_type="mmts", radius_km=max(radius_km, 1.5), max_count=2
     )
     bus_stops = transport_svc.find_nearest_stops(
         session, origin_lat, origin_lon, stop_type="bus", radius_km=max(radius_km, 0.8), max_count=5
     )
     stops = metro_stops + mmts_stops + bus_stops
+
     suggestions: list[PickupSuggestion] = []
     for stop in stops:
         risk_reduction = 35 if stop.stop_type == "metro" else 25 if stop.stop_type == "mmts" else 10
@@ -375,7 +395,7 @@ def journey_cost(body: dict, session: SessionDep) -> Any:
         hour, day_of_week = now.hour, now.weekday()
 
     wx = weather_svc.get_weather()
-    distance_km, traffic_duration_min = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
+    distance_km, _ = get_road_distance(origin_lat, origin_lon, dest_lat, dest_lon)
 
     all_costs = cost_svc.calculate_all_costs(
         distance_km, hour, wx.is_raining, day_of_week, passengers,
@@ -389,7 +409,8 @@ def journey_cost(body: dict, session: SessionDep) -> Any:
         precipitation_mm=wx.precipitation_mm,
         costs=[
             CostEntry(
-                mode=c.mode, variant=c.variant,
+                mode=c.mode,
+                variant=c.variant,
                 base_cost_inr=c.base_cost_inr,
                 surge_multiplier=c.surge_multiplier,
                 final_cost_inr=c.final_cost_inr,
@@ -402,3 +423,86 @@ def journey_cost(body: dict, session: SessionDep) -> Any:
             for c in all_costs
         ],
     )
+
+
+@router.get("/bus-stop-schedule")
+def bus_stop_schedule(
+    session: SessionDep,
+    stop_name: Optional[str] = None,
+    hour: Optional[int] = None,
+    route: Optional[str] = None,
+    direction: Optional[str] = None,
+) -> Any:
+    if stop_name:
+        all_routes = session.exec(select(BusRoute)).all()
+        results = [
+            r for r in all_routes
+            if stop_name.lower() in r.stops_json.lower()
+        ]
+        if not results:
+            return {"routes": []}
+
+        def get_upcoming_buses(r: BusRoute) -> str:
+            if not r.timetable_json:
+                return f"First: {r.first_bus} · Last: {r.last_bus}"
+            try:
+                timetable = json.loads(r.timetable_json)
+                if not timetable:
+                    return f"First: {r.first_bus} · Last: {r.last_bus}"
+                selected_hour = hour if hour is not None else datetime.now().hour
+                selected_total = selected_hour * 60
+                window_start = selected_total - 60
+                window_end = selected_total + 90
+                upcoming = []
+                for t in timetable:
+                    parts = t.split(":")
+                    if len(parts) != 2:
+                        continue
+                    try:
+                        t_total = int(parts[0]) * 60 + int(parts[1])
+                        if window_start <= t_total <= window_end:
+                            upcoming.append(t)
+                    except ValueError:
+                        continue
+                if upcoming:
+                    return "Next: " + ", ".join(upcoming[:3])
+                return f"First: {r.first_bus} · Last: {r.last_bus}"
+            except Exception:
+                return f"First: {r.first_bus} · Last: {r.last_bus}"
+
+        return {
+            "routes": [
+                {
+                    "route_name": r.route,
+                    "destination": r.destination,
+                    "next_arrival": get_upcoming_buses(r),
+                    "is_best": False,
+                }
+                for r in results[:8]
+            ]
+        }
+
+    if not route or not direction:
+        return {"error": "Provide stop_name or both route and direction"}
+
+    result = session.exec(
+        select(BusRoute).where(
+            BusRoute.route == route,
+            BusRoute.direction == direction,
+        )
+    ).first()
+
+    if not result:
+        return {"error": "Route not found"}
+
+    return {
+        "route": result.route,
+        "direction": result.direction,
+        "source": result.source,
+        "destination": result.destination,
+        "first_bus": result.first_bus,
+        "last_bus": result.last_bus,
+        "trips_per_day": result.trips_per_day,
+        "timetable": json.loads(result.timetable_json),
+        "stops": json.loads(result.stops_json),
+    }

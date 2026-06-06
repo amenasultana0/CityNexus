@@ -183,19 +183,11 @@ export interface WeatherImpactResponse {
 }
 
 export interface DayPlan {
-  is_festival: boolean
-  festival_name: string | null
-  weather_desc: string
-  weather_code: number
-  is_raining: boolean
-  cab_cost_inr: number
-  savings_vs_cab: number
   date: string
   day_name: string
   recommended_mode: string
   variant: string | null
   cost_inr: number
-  // ADD these three lines after cost_inr: number
   cost_min_inr: number
   cost_max_inr: number
   cost_display: string
@@ -203,14 +195,21 @@ export interface DayPlan {
   time_min: number
   risk_level: string
   reason: string
+  is_festival: boolean
+  festival_name: string | null
+  weather_desc: string
+  weather_code: number
+  is_raining: boolean
+  is_surge_day: boolean
+  best_departure_hour: number | null
+  best_departure_label: string | null
 }
 
 export interface WeeklyPlanResponse {
   weekly_plan: DayPlan[]
   cheapest_mode: string
   total_estimated_cost_inr: number
-  total_cab_cost_inr: number
-  total_savings_inr: number
+  total_time_min: number
 }
 
 export interface WeeklyPlanRequest {

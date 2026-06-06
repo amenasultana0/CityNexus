@@ -17,14 +17,13 @@ import {
 } from "@chakra-ui/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { ArrowLeftRight, MapPin } from "lucide-react"
-import { Area, AreaChart, Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Button as UIButton } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   type PredictRequest,
   getAlternatives,
   getBestTime,
-  getJourneyCost,
   getOptimalPickup,
   getRouteReliability,
   getWeatherImpact,
@@ -33,7 +32,6 @@ import {
 } from "@/lib/api"
 import { Autocomplete, useJsApiLoader } from "@react-google-maps/api"
 
-// Passes selected hour so backend can filter timetable to relevant window
 async function getBusStopSchedule(stopName: string, hour?: number) {
   const params = new URLSearchParams({ stop_name: stopName })
   if (hour !== undefined) params.append("hour", String(hour))
@@ -114,7 +112,6 @@ const TEAL = "#0694a2"
 const GREEN = "#10b981"
 const AMBER = "#f59e0b"
 const RED = "#ef4444"
-const COST_COLORS = [TEAL, BLUE, AMBER, RED, "#9f7aea", "#38b2ac"]
 
 function getRiskBorderColor(level: string) {
   return level === "low" ? GREEN : level === "moderate" ? AMBER : RED
@@ -122,7 +119,6 @@ function getRiskBorderColor(level: string) {
 function getRiskTextColor(level: string) {
   return level === "low" ? GREEN : level === "moderate" ? AMBER : RED
 }
-
 
 function Card({ children, topColor, p = 6 }: { children: React.ReactNode; topColor?: string; p?: number }) {
   return (
@@ -132,21 +128,16 @@ function Card({ children, topColor, p = 6 }: { children: React.ReactNode; topCol
   )
 }
 
-function CardLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={3}>
-      {children}
-    </Text>
-  )
-}
-
 
 function Dashboard() {
   const [selectedStop, setSelectedStop] = useState<any>(null)
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false)
   const [passengers, setPassengers] = useState(1)
-  const [timeStr, setTimeStr] = useState("08:00")
+  const [timeStr, setTimeStr] = useState(() => {
+    const n = new Date()
+    return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`
+  })
   const [formData, setFormData] = useState<FormData | null>(null)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [geoError, setGeoError] = useState("")
@@ -155,10 +146,11 @@ function Dashboard() {
   const [destText, setDestText] = useState("")
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [destLocation, setDestLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [plannerOpen, setPlannerOpen] = useState(false)
   const pickupRef = useRef<google.maps.places.Autocomplete | null>(null)
   const destRef = useRef<google.maps.places.Autocomplete | null>(null)
-  const [plannerOpen, setPlannerOpen] = useState(false)
   const alternativesRef = useRef<HTMLDivElement | null>(null)
+
   const scrollToAlternatives = () => {
     alternativesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
@@ -275,19 +267,6 @@ function Dashboard() {
     enabled: !!formData,
   })
 
-  const costQuery = useQuery({
-    queryKey: ["cost", formData],
-    queryFn: () => {
-      const now = new Date()
-      const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), formData!.hour, 0, 0).toISOString()
-      return getJourneyCost({
-        origin_lat: formData!.originLat, origin_lon: formData!.originLon,
-        dest_lat: formData!.destLat, dest_lon: formData!.destLon,
-        passengers: formData!.passengers, datetime: dt,
-      })
-    },
-    enabled: !!formData,
-  })
 
   const pickupQuery = useQuery({
     queryKey: ["pickup", formData],
@@ -312,7 +291,6 @@ function Dashboard() {
     })[0]
   })()
 
-
   return (
     <Box bg={PAGE_BG} minH="100vh">
       <style>{`
@@ -335,12 +313,8 @@ function Dashboard() {
           background-size: 400% 100%;
           animation: gradientShift 6s ease infinite;
         }
-        .hero-card {
-          animation: slideUpFade 0.48s cubic-bezier(0.22,1,0.36,1) both;
-        }
-        .hero-card-wrap {
-          transition: transform 0.38s ease, box-shadow 0.38s ease;
-        }
+        .hero-card { animation: slideUpFade 0.48s cubic-bezier(0.22,1,0.36,1) both; }
+        .hero-card-wrap { transition: transform 0.38s ease, box-shadow 0.38s ease; }
         .hero-card-wrap:hover {
           transform: translateY(-4px);
           box-shadow: 0 28px 70px rgba(0,0,0,0.13), 0 0 0 1px rgba(139,92,246,0.18) inset !important;
@@ -349,9 +323,7 @@ function Dashboard() {
           transition: transform 0.38s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s ease;
           cursor: default;
         }
-        .hero-mode-icon:hover {
-          transform: scale(1.16) rotate(-6deg);
-        }
+        .hero-mode-icon:hover { transform: scale(1.16) rotate(-6deg); }
         .hero-btn-uber {
           position: relative; overflow: hidden;
           transition: all 0.28s cubic-bezier(0.34,1.56,0.64,1);
@@ -362,10 +334,7 @@ function Dashboard() {
           transition: left 0.55s ease;
         }
         .hero-btn-uber:hover::before { left:100%; }
-        .hero-btn-uber:hover {
-          transform: translateY(-3px) scale(1.025);
-          box-shadow: 0 14px 40px rgba(0,0,0,0.45) !important;
-        }
+        .hero-btn-uber:hover { transform: translateY(-3px) scale(1.025); box-shadow: 0 14px 40px rgba(0,0,0,0.45) !important; }
         .hero-btn-ola {
           position: relative; overflow: hidden;
           transition: all 0.28s cubic-bezier(0.34,1.56,0.64,1);
@@ -376,10 +345,7 @@ function Dashboard() {
           transition: left 0.55s ease;
         }
         .hero-btn-ola:hover::before { left:100%; }
-        .hero-btn-ola:hover {
-          transform: translateY(-3px) scale(1.025);
-          box-shadow: 0 14px 40px rgba(22,163,74,0.6) !important;
-        }
+        .hero-btn-ola:hover { transform: translateY(-3px) scale(1.025); box-shadow: 0 14px 40px rgba(22,163,74,0.6) !important; }
         .hero-compare-btn {
           transition: all 0.28s cubic-bezier(0.34,1.56,0.64,1);
           position: relative; overflow: hidden;
@@ -390,47 +356,33 @@ function Dashboard() {
           transition: left 0.5s ease;
         }
         .hero-compare-btn:hover::before { left:100%; }
-        .hero-compare-btn:hover {
-          transform: translateY(-2px) scale(1.03);
-          box-shadow: 0 8px 28px rgba(124,58,237,0.38) !important;
-        }
-        .hero-stat-cell {
-          transition: background 0.22s ease;
-          cursor: default;
-        }
-        .hero-stat-cell:hover {
-          background: rgba(255,255,255,0.7);
-        }
-        .pulse-dot {
-          animation: pulseDot 2.5s ease-in-out infinite;
-        }
+        .hero-compare-btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 8px 28px rgba(124,58,237,0.38) !important; }
+        .hero-stat-cell { transition: background 0.22s ease; cursor: default; }
+        .hero-stat-cell:hover { background: rgba(255,255,255,0.7); }
+        .pulse-dot { animation: pulseDot 2.5s ease-in-out infinite; }
         .hero-best-badge {
           background: linear-gradient(135deg,#dcfce7,#bbf7d0);
-          color: #16a34a;
-          font-size: 0.68rem;
-          font-weight: 700;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          padding: 4px 12px;
-          border-radius: 999px;
-          white-space: nowrap;
+          color: #16a34a; font-size: 0.68rem; font-weight: 700;
+          letter-spacing: 0.04em; text-transform: uppercase;
+          padding: 4px 12px; border-radius: 999px; white-space: nowrap;
         }
-        .alt-row {
-          transition: background 0.18s ease, transform 0.18s ease;
-          border-radius: 14px;
+        .alt-row { transition: background 0.18s ease, transform 0.18s ease; border-radius: 14px; }
+        .alt-row:hover { background: rgba(255,255,255,0.82) !important; transform: translateX(4px); }
+        @keyframes transitSlideIn {
+          from { opacity: 0; transform: translateX(-14px) scale(0.96); }
+          to   { opacity: 1; transform: translateX(0) scale(1); }
         }
-        .alt-row:hover {
-          background: rgba(255,255,255,0.82) !important;
-          transform: translateX(4px);
-        }
-        @keyframes transitStopIn {
-          from { opacity: 0; transform: translateX(-12px); }
-          to   { opacity: 1; transform: translateX(0);     }
-        }
+        .transit-stop-item { animation: transitSlideIn 0.44s cubic-bezier(0.22,1,0.36,1) both; }
+        .transit-rail-stop { transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease !important; }
+        .transit-rail-stop:hover { transform: translateX(6px) !important; box-shadow: 0 8px 30px rgba(29,78,216,0.18) !important; }
+        .transit-bus-chip { transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease !important; cursor: pointer; }
+        .transit-bus-chip:hover { transform: translateY(-4px) scale(1.06) !important; box-shadow: 0 10px 28px rgba(5,150,105,0.28) !important; }
       `}</style>
+
       <Container maxW="full" p={6}>
         <VStack gap={5} align="stretch">
-          {/* ── Header row: title left, Plan a Trip right ── */}
+
+          {/* ── Header row ── */}
           <Flex align="center" justify="space-between" wrap="wrap" gap={3}>
             <Box>
               <Heading size="xl" color={PRIMARY} mb={1} fontWeight="700">Intelligence Dashboard</Heading>
@@ -449,25 +401,18 @@ function Dashboard() {
             </UIButton>
           </Flex>
 
-          {/* ── Route Input — floats on page, no hard card border ── */}
+          {/* ── Route Input ── */}
           <Box
-            bg={CARD}
-            borderRadius="20px"
-            p={4}
+            bg={CARD} borderRadius="20px" p={4}
             boxShadow="0 2px 20px rgba(0,0,0,0.06)"
             style={{ border: "1px solid rgba(226,232,240,0.7)" }}
           >
             <Flex gap={3} align="center" flexWrap="wrap">
               {/* Combined from → to pill */}
               <Flex
-                flex="1 1 420px"
-                align="center"
-                bg="white"
-                borderRadius="14px"
-                border={`1.5px solid ${BORDER}`}
-                boxShadow="0 2px 12px rgba(26,86,219,0.06)"
-                overflow="hidden"
-                minH="50px"
+                flex="1 1 420px" align="center" bg="white" borderRadius="14px"
+                border={`1.5px solid ${BORDER}`} boxShadow="0 2px 12px rgba(26,86,219,0.06)"
+                overflow="hidden" minH="50px"
               >
                 <Flex align="center" gap={2} flex={1} px={3} py={2}>
                   <MapPin size={16} color={BLUE} style={{ flexShrink: 0 }} />
@@ -494,15 +439,8 @@ function Dashboard() {
                 </Flex>
                 <Box w="1px" h="28px" bg={BORDER} flexShrink={0} />
                 <Box
-                  as="button"
-                  onClick={handleSwap}
-                  mx={2}
-                  p={2}
-                  borderRadius="8px"
-                  flexShrink={0}
-                  _hover={{ bg: INPUT_BG }}
-                  transition="all 0.2s"
-                  title="Swap locations"
+                  as="button" onClick={handleSwap} mx={2} p={2} borderRadius="8px" flexShrink={0}
+                  _hover={{ bg: INPUT_BG }} transition="all 0.2s" title="Swap locations"
                 >
                   <ArrowLeftRight size={15} color={MUTED} />
                 </Box>
@@ -586,8 +524,7 @@ function Dashboard() {
               ) : bestOption ? (
                 <Box
                   className="hero-card-wrap hero-card"
-                  borderRadius="24px"
-                  overflow="hidden"
+                  borderRadius="24px" overflow="hidden"
                   style={{
                     background: "radial-gradient(ellipse at 12% 75%,rgba(124,58,237,0.08) 0%,transparent 52%), radial-gradient(ellipse at 88% 18%,rgba(6,148,162,0.07) 0%,transparent 48%), linear-gradient(135deg,#eef2ff 0%,#faf5ff 55%,#ecfdf5 100%)",
                     border: "1px solid rgba(139,92,246,0.15)",
@@ -595,7 +532,6 @@ function Dashboard() {
                   }}
                 >
                   <Box className="hero-gradient-bar" />
-
                   <Box p={8}>
                     {/* Header row */}
                     <Flex align="center" mb={6}>
@@ -625,16 +561,12 @@ function Dashboard() {
                             {modeEmoji(bestOption.mode, bestOption.variant)}
                           </Box>
                           <Box>
-                            <Text
-                              fontSize="2.4rem" fontWeight="800" color={PRIMARY} lineHeight="1"
-                              style={{ textTransform: "capitalize" }} mb={2}
-                            >
+                            <Text fontSize="2.4rem" fontWeight="800" color={PRIMARY} lineHeight="1" style={{ textTransform: "capitalize" }} mb={2}>
                               {bestOption.mode}{bestOption.variant ? ` · ${bestOption.variant}` : ""}
                             </Text>
                             <Text color={MUTED} fontSize="md" lineHeight="1.55">{bestOption.reason}</Text>
                           </Box>
                         </Flex>
-
                         <button
                           className="hero-compare-btn"
                           onClick={scrollToAlternatives}
@@ -652,7 +584,6 @@ function Dashboard() {
 
                       {/* Right: booking buttons */}
                       <VStack gap={3} minW="240px" align="stretch" flexShrink={0}>
-                        {/* Uber */}
                         <button
                           className="hero-btn-uber"
                           onClick={() => window.open(buildUberUrl(
@@ -673,8 +604,6 @@ function Dashboard() {
                           </svg>
                           Book Uber
                         </button>
-
-                        {/* Ola */}
                         <button
                           className="hero-btn-ola"
                           onClick={() => window.open(buildOlaUrl(
@@ -717,6 +646,7 @@ function Dashboard() {
                           value: reliabilityQuery.data ? `${reliabilityQuery.data.avg_wait_min} min` : undefined,
                           sub: reliabilityQuery.data?.label,
                           color: PRIMARY,
+                          capitalize: false,
                           isLoading: reliabilityQuery.isLoading,
                         },
                         {
@@ -724,6 +654,7 @@ function Dashboard() {
                           value: `${bestOption.time_min} min`,
                           sub: bestOption.cost_display,
                           color: PRIMARY,
+                          capitalize: false,
                           isLoading: false,
                         },
                         {
@@ -731,6 +662,7 @@ function Dashboard() {
                           value: `${bestOption.reliability_score}/10`,
                           sub: "score",
                           color: bestOption.reliability_score >= 7 ? GREEN : bestOption.reliability_score >= 4 ? AMBER : RED,
+                          capitalize: false,
                           isLoading: false,
                         },
                       ] as const).map((stat, i) => (
@@ -749,7 +681,7 @@ function Dashboard() {
                             <>
                               <Text
                                 fontSize="1.9rem" fontWeight="800" lineHeight="1" mb={1} color={stat.color}
-                                style={{ textTransform: "capitalize" in stat && stat.capitalize ? "capitalize" : undefined }}
+                                style={{ textTransform: stat.capitalize ? "capitalize" : undefined }}
                               >
                                 {stat.value}
                               </Text>
@@ -764,64 +696,65 @@ function Dashboard() {
                   </Box>
                 </Box>
               ) : (
-                <Card>
-                  <Text color={MUTED}>No transport options available</Text>
-                </Card>
+                <Card><Text color={MUTED}>No transport options available</Text></Card>
               )}
 
               {/* ── Detail Cards: Risk + Reliability ── */}
               <Box bg={CARD} borderRadius="24px" boxShadow={CARD_SHADOW} overflow="hidden">
                 <Grid templateColumns={{ base: "1fr", lg: "1fr 1fr" }}>
                   {/* Cancellation Risk */}
-                  <Box p={7} style={{ borderRight: `1px solid ${BORDER}` }}>
-                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={5}>
-                      Cancellation Risk
-                    </Text>
+                  <Box p={7} style={{
+                    borderRight: `1px solid ${BORDER}`,
+                    background: predictionQuery.data
+                      ? `linear-gradient(145deg, ${predictionQuery.data.risk_level === "low" ? "rgba(16,185,129,0.06)" : predictionQuery.data.risk_level === "moderate" ? "rgba(245,158,11,0.06)" : "rgba(239,68,68,0.06)"} 0%, transparent 55%)`
+                      : undefined,
+                  }}>
+                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={5}>Cancellation Risk</Text>
                     {predictionQuery.isLoading ? <Skeleton h="160px" /> : predictionQuery.isError ? (
                       <ErrorCard message="Could not load" onRetry={() => predictionQuery.refetch()} />
                     ) : predictionQuery.data ? (
                       <>
                         <Flex align="center" gap={5} mb={5}>
-                          <Box flexShrink={0}>
-                            <svg width="84" height="84" viewBox="0 0 84 84">
-                              <circle cx="42" cy="42" r="32" fill="none" stroke={BORDER} strokeWidth="8"/>
-                              <circle cx="42" cy="42" r="32" fill="none"
+                          <Box flexShrink={0} style={{ filter: `drop-shadow(0 0 10px ${getRiskBorderColor(predictionQuery.data.risk_level)}55)` }}>
+                            <svg width="90" height="90" viewBox="0 0 90 90">
+                              <circle cx="45" cy="45" r="36" fill="none" stroke={BORDER} strokeWidth="8"/>
+                              <circle cx="45" cy="45" r="36" fill="none"
                                 stroke={getRiskBorderColor(predictionQuery.data.risk_level)}
-                                strokeWidth="8"
-                                strokeDasharray={`${(predictionQuery.data.probability * 201.1).toFixed(1)} 201.1`}
-                                strokeLinecap="round"
-                                transform="rotate(-90 42 42)"
+                                strokeWidth="8" strokeLinecap="round"
+                                strokeDasharray={`${(predictionQuery.data.probability * 226.2).toFixed(1)} 226.2`}
+                                transform="rotate(-90 45 45)"
                                 style={{ transition: "stroke-dasharray 1.2s cubic-bezier(0.22,1,0.36,1)" }}
                               />
-                              <text x="42" y="47" textAnchor="middle" fontSize="14" fontWeight="700"
+                              <text x="45" y="51" textAnchor="middle" fontSize="15" fontWeight="800"
                                 fill={getRiskTextColor(predictionQuery.data.risk_level)}>
                                 {Math.round(predictionQuery.data.probability * 100)}%
                               </text>
                             </svg>
                           </Box>
                           <Box>
-                            <Flex align="center" gap={2} mb={2}>
-                              <Box w="8px" h="8px" borderRadius="full" bg={getRiskBorderColor(predictionQuery.data.risk_level)} flexShrink={0} />
-                              <Box
-                                px={3} py={1} borderRadius="full" fontSize="sm" fontWeight="700"
-                                bg={predictionQuery.data.risk_level === "low" ? "#dcfce7" : predictionQuery.data.risk_level === "moderate" ? "#fef3c7" : "#fee2e2"}
-                                color={getRiskTextColor(predictionQuery.data.risk_level)}
-                              >
-                                {predictionQuery.data.risk_level.charAt(0).toUpperCase() + predictionQuery.data.risk_level.slice(1)} risk
-                              </Box>
-                            </Flex>
+                            <Box mb={2} display="inline-flex" alignItems="center" px={3} py={1} borderRadius="full" fontWeight="700" fontSize="sm"
+                              style={{
+                                background: predictionQuery.data.risk_level === "low" ? "linear-gradient(135deg,#dcfce7,#bbf7d0)" : predictionQuery.data.risk_level === "moderate" ? "linear-gradient(135deg,#fef3c7,#fde68a)" : "linear-gradient(135deg,#fee2e2,#fecaca)",
+                                color: getRiskTextColor(predictionQuery.data.risk_level),
+                                boxShadow: `0 2px 8px ${getRiskBorderColor(predictionQuery.data.risk_level)}33`,
+                              }}>
+                              {predictionQuery.data.risk_level === "low" ? "✓" : predictionQuery.data.risk_level === "moderate" ? "⚠" : "⚡"}&nbsp;
+                              {predictionQuery.data.risk_level.charAt(0).toUpperCase() + predictionQuery.data.risk_level.slice(1)} risk
+                            </Box>
                             <Text fontSize="sm" color={MUTED} lineHeight="1.6">
-                              Predicted by {predictionQuery.data.using_ml_model ? "XGBoost ML" : "rule-based model"}
+                              {predictionQuery.data.using_ml_model ? "XGBoost ML" : "Rule-based"} · your route + time
                             </Text>
-                            <Text fontSize="sm" color={MUTED}>based on your route + time</Text>
                           </Box>
                         </Flex>
                         <Grid templateColumns="1fr 1fr" gap={3}>
-                          <Box bg={INPUT_BG} borderRadius="14px" p={4}>
+                          <Box borderRadius="14px" p={4} style={{
+                            background: predictionQuery.data.risk_level === "low" ? "linear-gradient(135deg,#f0fdf4,#dcfce7)" : predictionQuery.data.risk_level === "moderate" ? "linear-gradient(135deg,#fffbeb,#fef3c7)" : "linear-gradient(135deg,#fff1f2,#fee2e2)",
+                            border: `1px solid ${getRiskBorderColor(predictionQuery.data.risk_level)}33`,
+                          }}>
                             <Text fontSize="xs" color={MUTED} mb={1}>Probability</Text>
-                            <Text fontSize="xl" fontWeight="800" color={PRIMARY}>{Math.round(predictionQuery.data.probability * 100)}%</Text>
+                            <Text fontSize="xl" fontWeight="800" color={getRiskTextColor(predictionQuery.data.risk_level)}>{Math.round(predictionQuery.data.probability * 100)}%</Text>
                           </Box>
-                          <Box bg={INPUT_BG} borderRadius="14px" p={4}>
+                          <Box bg={INPUT_BG} borderRadius="14px" p={4} style={{ borderLeft: `3px solid ${BLUE}` }}>
                             <Text fontSize="xs" color={MUTED} mb={1}>Model</Text>
                             <Text fontSize="xl" fontWeight="800" color={PRIMARY}>{predictionQuery.data.using_ml_model ? "XGBoost" : "Rules"}</Text>
                           </Box>
@@ -831,17 +764,27 @@ function Dashboard() {
                   </Box>
 
                   {/* Route Reliability */}
-                  <Box p={7}>
-                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={5}>
-                      Route Reliability
-                    </Text>
+                  <Box p={7} style={{
+                    background: reliabilityQuery.data
+                      ? `linear-gradient(145deg, ${reliabilityQuery.data.score >= 7 ? "rgba(16,185,129,0.05)" : reliabilityQuery.data.score >= 4 ? "rgba(245,158,11,0.05)" : "rgba(239,68,68,0.05)"} 0%, transparent 55%)`
+                      : undefined,
+                  }}>
+                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={5}>Route Reliability</Text>
                     {reliabilityQuery.isLoading ? <Skeleton h="160px" /> : reliabilityQuery.isError ? (
                       <ErrorCard message="Could not load" onRetry={() => reliabilityQuery.refetch()} />
                     ) : reliabilityQuery.data ? (
                       <>
                         <Flex align="flex-end" gap={2} mb={5}>
-                          <Text fontSize="5rem" fontWeight="800" lineHeight="1"
-                            color={reliabilityQuery.data.score >= 7 ? GREEN : reliabilityQuery.data.score >= 4 ? AMBER : RED}>
+                          <Text fontSize="5rem" fontWeight="800" lineHeight="1" style={{
+                            background: reliabilityQuery.data.score >= 7
+                              ? "linear-gradient(135deg,#10b981,#059669)"
+                              : reliabilityQuery.data.score >= 4
+                              ? "linear-gradient(135deg,#f59e0b,#d97706)"
+                              : "linear-gradient(135deg,#ef4444,#dc2626)",
+                            WebkitBackgroundClip: "text",
+                            WebkitTextFillColor: "transparent",
+                            backgroundClip: "text",
+                          }}>
                             {reliabilityQuery.data.score}
                           </Text>
                           <Box mb={2}>
@@ -856,16 +799,20 @@ function Dashboard() {
                           {[
                             { label: "Cancellation rate", value: `${Math.round(reliabilityQuery.data.cancel_rate * 100)}%`, w: reliabilityQuery.data.cancel_rate * 100, color: RED },
                             { label: "Avg wait time", value: `${reliabilityQuery.data.avg_wait_min} min`, w: Math.min(reliabilityQuery.data.avg_wait_min * 5, 100), color: AMBER },
-                            { label: "Reliability score", value: `${Math.round(reliabilityQuery.data.score * 10)}%`, w: reliabilityQuery.data.score * 10, color: BLUE },
+                            { label: "Reliability score", value: `${Math.round(reliabilityQuery.data.score * 10)}%`, w: reliabilityQuery.data.score * 10, color: GREEN },
                           ].map((row) => (
                             <Box key={row.label}>
                               <Flex justify="space-between" mb={1.5}>
                                 <Text fontSize="sm" color={MUTED}>{row.label}</Text>
                                 <Text fontSize="sm" fontWeight="700" color={row.color}>{row.value}</Text>
                               </Flex>
-                              <Box h="6px" bg={BORDER} borderRadius="full" overflow="hidden">
-                                <Box h="100%" bg={row.color} w={`${row.w}%`} borderRadius="full"
-                                  style={{ transition: "width 1.2s cubic-bezier(0.22,1,0.36,1)" }} />
+                              <Box h="7px" bg={BORDER} borderRadius="full" overflow="hidden">
+                                <Box h="100%" borderRadius="full" w={`${row.w}%`}
+                                  style={{
+                                    background: `linear-gradient(90deg, ${row.color}88, ${row.color})`,
+                                    transition: "width 1.2s cubic-bezier(0.22,1,0.36,1)",
+                                    boxShadow: `0 0 8px ${row.color}66`,
+                                  }} />
                               </Box>
                             </Box>
                           ))}
@@ -876,28 +823,18 @@ function Dashboard() {
                 </Grid>
               </Box>
 
-              {/* ── Transport Options (sort + ranked list) ── */}
+              {/* ── Transport Options ── */}
               <Box ref={alternativesRef}>
-                {/* Section header */}
                 <Flex align="center" justify="space-between" flexWrap="wrap" gap={4} mb={2}>
                   <Box>
-                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={1}>
-                      Weigh your options
-                    </Text>
+                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={1}>Weigh your options</Text>
                     <Heading size="lg" color={PRIMARY} fontWeight="800">Every way there, at a glance</Heading>
                   </Box>
-                  {/* Pill sort toggle */}
-                  <Flex
-                    bg={CARD} borderRadius="12px" p={1} gap={1}
-                    style={{ border: `1px solid ${BORDER}`, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
-                  >
+                  <Flex bg={CARD} borderRadius="12px" p={1} gap={1} style={{ border: `1px solid ${BORDER}`, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
                     {(["best", "fastest", "cheapest"] as const).map((mode) => (
                       <Box
-                        key={mode}
-                        as="button"
-                        onClick={() => setSortMode(mode)}
-                        px={4} py={2} borderRadius="9px"
-                        cursor="pointer" fontWeight="600" fontSize="sm"
+                        key={mode} as="button" onClick={() => setSortMode(mode)}
+                        px={4} py={2} borderRadius="9px" cursor="pointer" fontWeight="600" fontSize="sm"
                         display="flex" alignItems="center" gap={1.5}
                         style={{
                           background: sortMode === mode ? BLUE : "transparent",
@@ -907,19 +844,16 @@ function Dashboard() {
                           transition: "all 0.22s cubic-bezier(0.34,1.56,0.64,1)",
                         }}
                       >
-                        {mode === "best" ? "★" : mode === "fastest" ? "⚡" : "💰"}
-                        {" "}{mode.charAt(0).toUpperCase() + mode.slice(1)}
+                        {mode === "best" ? "★" : mode === "fastest" ? "⚡" : "💰"} {mode.charAt(0).toUpperCase() + mode.slice(1)}
                       </Box>
                     ))}
                   </Flex>
                 </Flex>
 
-                {/* Ranked by label */}
                 <Text fontSize="xs" color={SUBTLE} textTransform="uppercase" letterSpacing="1px" fontWeight="600" mb={4}>
                   Ranked by {sortMode} fit
                 </Text>
 
-                {/* List */}
                 {alternativesQuery.isLoading ? (
                   <VStack gap={3}>
                     <Skeleton h="64px" borderRadius="14px" />
@@ -955,9 +889,7 @@ function Dashboard() {
                         const isLast = i === sorted.length - 1
                         return (
                           <Box
-                            key={i}
-                            className="alt-row"
-                            px={4} py={3.5}
+                            key={i} className="alt-row" px={4} py={3.5}
                             borderBottom={isLast ? "none" : `1px solid rgba(226,232,240,0.6)`}
                             opacity={isUnavailable ? 0.45 : 1}
                             style={{ background: isBest ? "rgba(16,185,129,0.05)" : "transparent" }}
@@ -975,27 +907,16 @@ function Dashboard() {
                                   <Text fontWeight="700" color={isUnavailable ? MUTED : PRIMARY} textTransform="capitalize" fontSize="md">
                                     {opt.vehicles_needed > 1 ? `${opt.vehicles_needed}× ` : ""}{opt.mode}{opt.variant ? ` · ${opt.variant}` : ""}
                                   </Text>
-                                  {isBest && (
-                                    <Box px={2} py={0.5} borderRadius="5px" bg={BLUE} color="white" fontSize="0.6rem" fontWeight="800" letterSpacing="0.05em">
-                                      BEST
-                                    </Box>
-                                  )}
-                                  {isUnavailable && (
-                                    <Box px={2} py={0.5} borderRadius="5px" bg={INPUT_BG} color={MUTED} fontSize="0.6rem" fontWeight="700">
-                                      UNAVAILABLE
-                                    </Box>
-                                  )}
-                                  {isHighRisk && (
-                                    <Box px={2} py={0.5} borderRadius="5px" bg="#fee2e2" color={RED} fontSize="0.6rem" fontWeight="700">
-                                      HIGH RISK
-                                    </Box>
-                                  )}
+                                  {isBest && <Box px={2} py={0.5} borderRadius="5px" bg={BLUE} color="white" fontSize="0.6rem" fontWeight="800" letterSpacing="0.05em">BEST</Box>}
+                                  {isUnavailable && <Box px={2} py={0.5} borderRadius="5px" bg={INPUT_BG} color={MUTED} fontSize="0.6rem" fontWeight="700">UNAVAILABLE</Box>}
+                                  {isHighRisk && <Box px={2} py={0.5} borderRadius="5px" bg="#fee2e2" color={RED} fontSize="0.6rem" fontWeight="700">HIGH RISK</Box>}
                                 </Flex>
-                                <Text fontSize="sm" color={MUTED}>{opt.time_min} min · {opt.reliability_score}/10 reliable</Text>
+                                <Text fontSize="xs" color={MUTED}>{opt.reason}</Text>
                               </Box>
-                              <Text fontWeight="800" fontSize="md" color={isUnavailable ? MUTED : PRIMARY} flexShrink={0}>
-                                {opt.cost_display}
-                              </Text>
+                              <Box textAlign="right" flexShrink={0}>
+                                <Text fontWeight="700" fontSize="md" color={isUnavailable ? MUTED : PRIMARY}>{opt.cost_display}</Text>
+                                <Text fontSize="xs" color={MUTED}>{opt.time_min} min · {opt.reliability_score}/10</Text>
+                              </Box>
                             </Flex>
                           </Box>
                         )
@@ -1005,31 +926,12 @@ function Dashboard() {
                 })() : null}
               </Box>
 
-              {/* ── Cost Breakdown ── */}
-              <Card>
-                <CardLabel>Cost Breakdown</CardLabel>
-                {costQuery.isLoading ? <Skeleton h="200px" /> : costQuery.isError ? <ErrorCard message="Could not load data — check backend connection" onRetry={() => costQuery.refetch()} /> : costQuery.data ? (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={costQuery.data.costs.filter((c) => c.available).map((c) => ({ name: c.mode + (c.variant ? ` (${c.variant})` : ""), cost: Math.round(c.final_cost_inr) }))} layout="vertical" margin={{ left: 110, right: 40, top: 5, bottom: 5 }}>
-                      <XAxis type="number" tick={{ fill: MUTED, fontSize: 12 }} tickFormatter={(v: number) => `₹${v}`} />
-                      <YAxis type="category" dataKey="name" tick={{ fill: MUTED, fontSize: 12 }} width={110} />
-                      <Tooltip formatter={(v) => [`₹${v ?? ""}`, "Final Cost"]} />
-                      <Bar dataKey="cost" radius={[0, 4, 4, 0]}>
-                        {costQuery.data.costs.filter((c) => c.available).map((_, i) => <Cell key={i} fill={COST_COLORS[i % COST_COLORS.length]} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : null}
-              </Card>
 
               {/* ── Best Time to Leave ── */}
               <Box bg={CARD} borderRadius="24px" boxShadow={CARD_SHADOW} p={7}>
-                {/* Header */}
                 <Flex align="flex-start" justify="space-between" mb={6} flexWrap="wrap" gap={3}>
                   <Box>
-                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={1}>
-                      Timing Intelligence
-                    </Text>
+                    <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={1}>Timing Intelligence</Text>
                     <Heading size="lg" color={PRIMARY} fontWeight="800">When the streets forgive you</Heading>
                   </Box>
                   <Flex align="center" gap={2}>
@@ -1051,7 +953,6 @@ function Dashboard() {
                     rate: Math.round(s.cancel_risk * 100),
                     isBest: s.time_label === bestSlot?.time_label,
                   }))
-
                   return (
                     <>
                       <ResponsiveContainer width="100%" height={220}>
@@ -1062,21 +963,11 @@ function Dashboard() {
                               <stop offset="100%" stopColor={TEAL} stopOpacity={0.01} />
                             </linearGradient>
                           </defs>
-                          <XAxis
-                            dataKey="time"
-                            tick={{ fontSize: 13, fill: MUTED, fontWeight: 600 }}
-                            axisLine={false} tickLine={false}
-                          />
+                          <XAxis dataKey="time" tick={{ fontSize: 13, fill: MUTED, fontWeight: 600 }} axisLine={false} tickLine={false} />
                           <YAxis hide domain={[0, 100]} />
-                          <Tooltip
-                            formatter={(v) => [`${v}%`, "Cancel risk"]}
-                            contentStyle={{ borderRadius: "10px", border: `1px solid ${BORDER}`, fontSize: "13px" }}
-                          />
+                          <Tooltip formatter={(v) => [`${v}%`, "Cancel risk"]} contentStyle={{ borderRadius: "10px", border: `1px solid ${BORDER}`, fontSize: "13px" }} />
                           <Area
-                            type="monotone"
-                            dataKey="rate"
-                            stroke={TEAL}
-                            strokeWidth={2.5}
+                            type="monotone" dataKey="rate" stroke={TEAL} strokeWidth={2.5}
                             fill="url(#cancelGrad)"
                             activeDot={{ r: 6, fill: TEAL, stroke: "white", strokeWidth: 2 }}
                             dot={(dotProps: any) => {
@@ -1088,21 +979,13 @@ function Dashboard() {
                               const labelColor = isBest ? GREEN : isCurrent ? BLUE : "#555"
                               return (
                                 <g key={index}>
-                                  {isBest && (
-                                    <circle cx={cx} cy={cy} r={16} fill="none" stroke={GREEN} strokeWidth={2} opacity={0.45} />
-                                  )}
-                                  <circle
-                                    cx={cx} cy={cy}
-                                    r={isBest || isCurrent ? 7 : 4}
+                                  {isBest && <circle cx={cx} cy={cy} r={16} fill="none" stroke={GREEN} strokeWidth={2} opacity={0.45} />}
+                                  <circle cx={cx} cy={cy} r={isBest || isCurrent ? 7 : 4}
                                     fill={isCurrent && !isBest ? "transparent" : isBest ? GREEN : "white"}
                                     stroke={isBest ? GREEN : isCurrent ? BLUE : SUBTLE}
                                     strokeWidth={isBest || isCurrent ? 2.5 : 1.5}
                                   />
-                                  <text
-                                    x={cx} y={cy - (isBest ? 28 : 18)}
-                                    textAnchor="middle" fontSize="12" fontWeight="700"
-                                    fill={labelColor}
-                                  >
+                                  <text x={cx} y={cy - (isBest ? 28 : 18)} textAnchor="middle" fontSize="12" fontWeight="700" fill={labelColor}>
                                     {d.rate}%
                                   </text>
                                 </g>
@@ -1111,23 +994,15 @@ function Dashboard() {
                           />
                         </AreaChart>
                       </ResponsiveContainer>
-
-                      {/* Footer summary */}
-                      <Flex
-                        align="center" gap={2} flexWrap="wrap"
-                        mt={4} pt={4} borderTop={`1px solid ${BORDER}`}
-                      >
+                      <Flex align="center" gap={2} flexWrap="wrap" mt={4} pt={4} borderTop={`1px solid ${BORDER}`}>
                         <Box w="14px" h="14px" borderRadius="3px" bg={GREEN} flexShrink={0} />
                         <Text fontSize="sm" color={PRIMARY} lineHeight="1.6">
                           Leaving at{" "}
                           <Text as="span" color={BLUE} fontWeight="700">{currentSlot?.time_label}</Text>
                           {" "}gives you a{" "}
-                          <Text as="span" color={AMBER} fontWeight="700">
-                            {Math.round((currentSlot?.cancel_risk ?? 0) * 100)}% cancellation rate
-                          </Text>
+                          <Text as="span" color={AMBER} fontWeight="700">{Math.round((currentSlot?.cancel_risk ?? 0) * 100)}% cancellation rate</Text>
                           {bestSlot && bestSlot.time_label !== currentSlot?.time_label && (
-                            <>
-                              {" "}· Best window today is{" "}
+                            <> · Best window today is{" "}
                               <Text as="span" color={GREEN} fontWeight="700">{bestSlot.time_label}</Text>
                               {" "}at just {Math.round(bestSlot.cancel_risk * 100)}%.
                             </>
@@ -1143,89 +1018,166 @@ function Dashboard() {
               </Box>
 
               {/* ── Nearest Transit Stops ── */}
-              <Box bg={CARD} borderRadius="20px" p={5} boxShadow="0 2px 20px rgba(0,0,0,0.06)" style={{ border: "1px solid rgba(226,232,240,0.7)" }}>
-                <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={4}>Nearest Transit Stops</Text>
-                {pickupQuery.isLoading ? (
-                  <Skeleton h="120px" />
-                ) : pickupQuery.isError ? (
-                  <ErrorCard message="Could not load data — check backend connection" onRetry={() => pickupQuery.refetch()} />
-                ) : (() => {
-                  const allStops = pickupQuery.data?.suggestions ?? []
-                  const railStops = allStops.filter((s: any) => s.stop_type === "metro" || s.stop_type === "mmts").slice(0, 3)
-                  const busStops = allStops.filter((s: any) => s.stop_type === "bus").slice(0, 3)
-                  return (
-                    <VStack gap={4} align="stretch">
-                      <Box>
-                        <Flex align="center" gap={2} mb={2}>
-                          <Box w="2.5px" h="13px" borderRadius="2px" style={{ background: "linear-gradient(to bottom, #0694a2, #1a56db)" }} />
-                          <Text fontSize="0.7rem" fontWeight="700" color={TEAL} letterSpacing="0.5px">Metro & MMTS Rail</Text>
-                        </Flex>
-                        {railStops.length > 0 ? (
-                          <VStack gap={2} align="stretch">
-                            {railStops.map((stop: any, i: number) => (
-                              <Flex key={i} align="center" gap={3} p={3} borderRadius="12px"
-                                style={{ background: "linear-gradient(135deg,#e6fffa 0%,#ebf8ff 100%)", borderLeft: "3px solid #0694a2", animation: `transitStopIn 0.4s ${i * 0.08}s both` }}
-                              >
-                                <Text fontSize="xl">{stop.stop_type === "metro" ? "🚇" : "🚂"}</Text>
-                                <Box flex="1">
-                                  <Text fontWeight="600" color={PRIMARY} fontSize="sm">{stop.name}</Text>
-                                  <Text fontSize="xs" color={MUTED}>{stop.distance_m}m away · {stop.walk_min} min walk</Text>
-                                </Box>
-                                <Box px={2} py={0.5} borderRadius="full" bg="rgba(6,148,162,0.12)" color={TEAL} fontSize="0.68rem" fontWeight="700">↓{stop.risk_reduction_pct}%</Box>
-                              </Flex>
-                            ))}
-                          </VStack>
-                        ) : (
-                          <Flex align="center" gap={2} p={3} borderRadius="10px" bg={INPUT_BG}>
-                            <Text>🚫</Text>
-                            <Text fontSize="sm" color={MUTED}>No metro stations within 1.5 km</Text>
-                          </Flex>
-                        )}
-                      </Box>
-                      <Box>
-                        <Flex align="center" gap={2} mb={2}>
-                          <Box w="2.5px" h="13px" borderRadius="2px" style={{ background: "linear-gradient(to bottom, #7c3aed, #ec4899)" }} />
-                          <Text fontSize="0.7rem" fontWeight="700" color="#7c3aed" letterSpacing="0.5px">Bus Stops</Text>
-                        </Flex>
-                        {busStops.length > 0 ? (
-                          <VStack gap={2} align="stretch">
-                            {busStops.map((stop: any, i: number) => (
-                              <Flex key={i} align="center" gap={3} p={3} borderRadius="12px" cursor="pointer"
-                                transition="transform 0.18s ease"
-                                _hover={{ transform: "translateX(3px)" }}
-                                style={{ background: "linear-gradient(135deg,#f5f3ff 0%,#fdf4ff 100%)", borderLeft: "3px solid #7c3aed", animation: `transitStopIn 0.4s ${(railStops.length + i) * 0.08 + 0.1}s both` }}
-                                onClick={async () => {
-                                  setSelectedStop(stop)
-                                  setIsLoadingSchedule(true)
-                                  try {
-                                    const data = await getBusStopSchedule(stop.name, formData?.hour)
-                                    setScheduleData(data)
-                                  } catch (err) {
-                                    console.error(err)
-                                    setScheduleData({ error: "Failed to load schedule" })
-                                  }
-                                  setIsLoadingSchedule(false)
-                                }}
-                              >
-                                <Text fontSize="xl">🚌</Text>
-                                <Box flex="1">
-                                  <Text fontWeight="600" color={PRIMARY} fontSize="sm">{stop.name}</Text>
-                                  <Text fontSize="xs" color={MUTED}>{stop.distance_m}m away · {stop.walk_min} min walk</Text>
-                                </Box>
-                                <Box px={2} py={0.5} borderRadius="full" bg="rgba(124,58,237,0.1)" color="#7c3aed" fontSize="0.68rem" fontWeight="700">↓{stop.risk_reduction_pct}%</Box>
-                              </Flex>
-                            ))}
-                          </VStack>
-                        ) : (
-                          <Flex align="center" gap={2} p={3} borderRadius="10px" bg={INPUT_BG}>
-                            <Text>🚫</Text>
-                            <Text fontSize="sm" color={MUTED}>No bus stops found nearby</Text>
-                          </Flex>
-                        )}
-                      </Box>
-                    </VStack>
-                  )
-                })()}
+              <Box bg={CARD} borderRadius="24px" boxShadow={CARD_SHADOW} overflow="hidden">
+                <Box className="hero-gradient-bar" />
+                <Box p={6}>
+                  <Text fontSize="0.65rem" color={MUTED} fontWeight="700" letterSpacing="1.5px" textTransform="uppercase" mb={1}>Transit Nearby</Text>
+                  <Heading size="md" color={PRIMARY} fontWeight="800" mb={5}>Fastest way to skip the cab</Heading>
+                  {pickupQuery.isLoading ? <Skeleton h="200px" borderRadius="16px" /> : pickupQuery.isError ? <ErrorCard message="Could not load data — check backend connection" onRetry={() => pickupQuery.refetch()} /> : (() => {
+                    const allStops = pickupQuery.data?.suggestions ?? []
+                    const railStops = allStops.filter((s: any) => s.stop_type === "metro" || s.stop_type === "mmts")
+                    const nearbyBus = allStops.filter((s: any) => s.stop_type === "bus").slice(0, 4)
+                    const makeClickHandler = (stop: any) => async () => {
+                      setSelectedStop(stop)
+                      setIsLoadingSchedule(true)
+                      try {
+                        const data = await getBusStopSchedule(stop.name, formData?.hour)
+                        setScheduleData(data)
+                      } catch (err) {
+                        console.error(err)
+                        setScheduleData({ error: "Failed to load schedule" })
+                      }
+                      setIsLoadingSchedule(false)
+                    }
+                    return (
+                      <VStack gap={5} align="stretch">
+
+                        {/* ── Metro / MMTS subway-map timeline ── */}
+                        <Box>
+                          <Box mb={4} style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg,#1d4ed8,#7c3aed)", padding: "5px 16px", borderRadius: "999px", color: "#fff", fontSize: "0.62rem", fontWeight: "800", letterSpacing: "0.08em", boxShadow: "0 4px 16px rgba(29,78,216,0.38)" }}>
+                            🚇 METRO &amp; MMTS
+                          </Box>
+                          {railStops.length ? (
+                            <VStack gap={0} align="stretch">
+                              {railStops.slice(0, 3).map((stop: any, i: number) => {
+                                const isLast = i === Math.min(railStops.length, 3) - 1
+                                const isMetro = stop.stop_type === "metro"
+                                return (
+                                  <Flex key={i} align="stretch" className="transit-stop-item" style={{ animationDelay: `${i * 100}ms` }}>
+                                    {/* Vertical metro line with dot */}
+                                    <Flex direction="column" align="center" mr={4} w="18px" flexShrink={0}>
+                                      <Box w="13px" h="13px" borderRadius="full" mt="18px" flexShrink={0}
+                                        style={{
+                                          background: isMetro ? "linear-gradient(135deg,#1d4ed8,#7c3aed)" : "linear-gradient(135deg,#d97706,#f59e0b)",
+                                          boxShadow: `0 0 0 4px ${isMetro ? "rgba(29,78,216,0.18)" : "rgba(217,119,6,0.18)"}`,
+                                        }} />
+                                      {!isLast && <Box flex="1" w="2px" mt="3px" style={{ background: "linear-gradient(to bottom,#4f46e5,#7c3aed)", minHeight: "14px" }} />}
+                                    </Flex>
+                                    {/* Floating card */}
+                                    <Box flex="1" pb={isLast ? 0 : 3}>
+                                      <Box className="transit-rail-stop" py={3} px={4} borderRadius="18px" cursor="pointer"
+                                        onClick={makeClickHandler(stop)}
+                                        style={{
+                                          background: isMetro
+                                            ? "linear-gradient(135deg,rgba(224,242,254,0.7) 0%,rgba(237,233,254,0.6) 100%)"
+                                            : "linear-gradient(135deg,rgba(254,243,199,0.65) 0%,rgba(254,249,195,0.75) 100%)",
+                                          backdropFilter: "blur(10px)",
+                                          boxShadow: `0 4px 22px ${isMetro ? "rgba(29,78,216,0.09)" : "rgba(217,119,6,0.09)"}`,
+                                          border: `1.5px solid ${isMetro ? "rgba(196,213,254,0.9)" : "rgba(253,230,138,0.9)"}`,
+                                        }}>
+                                        <Flex justify="space-between" align="center">
+                                          <Box>
+                                            <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{stop.name}</Text>
+                                            <Flex align="center" gap={2} mt="3px">
+                                              <Text fontSize="0.68rem" color={MUTED}>{stop.walk_min} min walk</Text>
+                                              <Box w="3px" h="3px" borderRadius="full" bg={SUBTLE} flexShrink={0} />
+                                              <Text fontSize="0.68rem" color={MUTED}>{stop.distance_m}m away</Text>
+                                            </Flex>
+                                          </Box>
+                                          <Box flexShrink={0} style={{
+                                            background: isMetro ? "linear-gradient(135deg,#1d4ed8,#0284c7)" : "linear-gradient(135deg,#d97706,#b45309)",
+                                            color: "#fff", fontSize: "0.63rem", fontWeight: "800",
+                                            padding: "4px 12px", borderRadius: "999px", whiteSpace: "nowrap",
+                                            boxShadow: `0 4px 12px ${isMetro ? "rgba(29,78,216,0.4)" : "rgba(217,119,6,0.4)"}`,
+                                          }}>
+                                            ↓{stop.risk_reduction_pct}%
+                                          </Box>
+                                        </Flex>
+                                      </Box>
+                                    </Box>
+                                  </Flex>
+                                )
+                              })}
+                            </VStack>
+                          ) : (
+                            <Box py={5} borderRadius="20px" textAlign="center"
+                              style={{ background: "linear-gradient(135deg,#f0f9ff,#eff6ff)", border: "1.5px dashed #bfdbfe" }}>
+                              <Text fontSize="2xl" mb={1}>🚇</Text>
+                              <Text fontSize="sm" color="#475569" fontWeight="600">No metro nearby</Text>
+                              <Text fontSize="xs" color={SUBTLE} mt="2px">Nearest station beyond 1.5 km</Text>
+                            </Box>
+                          )}
+                        </Box>
+
+                        {/* Flowing divider */}
+                        <Box h="1px" style={{ background: "linear-gradient(to right, transparent, #c7d2fe 30%, #a5f3fc 50%, #c7d2fe 70%, transparent)" }} />
+
+                        {/* ── Bus stops — same subway-map timeline, green theme ── */}
+                        <Box>
+                          <Box mb={4} style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg,#059669,#10b981)", padding: "5px 16px", borderRadius: "999px", color: "#fff", fontSize: "0.62rem", fontWeight: "800", letterSpacing: "0.08em", boxShadow: "0 4px 16px rgba(5,150,105,0.38)" }}>
+                            🚌 BUS STOPS
+                          </Box>
+                          {nearbyBus.length ? (
+                            <VStack gap={0} align="stretch">
+                              {nearbyBus.map((stop: any, i: number) => {
+                                const isLast = i === nearbyBus.length - 1
+                                return (
+                                  <Flex key={i} align="stretch" className="transit-stop-item" style={{ animationDelay: `${(i + railStops.length) * 100}ms` }}>
+                                    {/* Vertical bus line with dot */}
+                                    <Flex direction="column" align="center" mr={4} w="18px" flexShrink={0}>
+                                      <Box w="13px" h="13px" borderRadius="full" mt="18px" flexShrink={0}
+                                        style={{
+                                          background: "linear-gradient(135deg,#059669,#10b981)",
+                                          boxShadow: "0 0 0 4px rgba(5,150,105,0.18)",
+                                        }} />
+                                      {!isLast && <Box flex="1" w="2px" mt="3px" style={{ background: "linear-gradient(to bottom,#059669,#34d399)", minHeight: "14px" }} />}
+                                    </Flex>
+                                    {/* Floating card */}
+                                    <Box flex="1" pb={isLast ? 0 : 3}>
+                                      <Box className="transit-rail-stop" py={3} px={4} borderRadius="18px" cursor="pointer"
+                                        onClick={makeClickHandler(stop)}
+                                        style={{
+                                          background: "linear-gradient(135deg,rgba(209,250,229,0.6) 0%,rgba(236,253,245,0.75) 100%)",
+                                          backdropFilter: "blur(10px)",
+                                          boxShadow: "0 4px 22px rgba(5,150,105,0.09)",
+                                          border: "1.5px solid rgba(110,231,183,0.8)",
+                                        }}>
+                                        <Flex justify="space-between" align="center">
+                                          <Box>
+                                            <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{stop.name}</Text>
+                                            <Flex align="center" gap={2} mt="3px">
+                                              <Text fontSize="0.68rem" color={MUTED}>{stop.walk_min} min walk</Text>
+                                              <Box w="3px" h="3px" borderRadius="full" bg={SUBTLE} flexShrink={0} />
+                                              <Text fontSize="0.68rem" color={MUTED}>{stop.distance_m}m away</Text>
+                                            </Flex>
+                                          </Box>
+                                          <Box flexShrink={0} style={{
+                                            background: "linear-gradient(135deg,#059669,#047857)",
+                                            color: "#fff", fontSize: "0.63rem", fontWeight: "800",
+                                            padding: "4px 12px", borderRadius: "999px", whiteSpace: "nowrap",
+                                            boxShadow: "0 4px 12px rgba(5,150,105,0.4)",
+                                          }}>
+                                            ↓{stop.risk_reduction_pct}%
+                                          </Box>
+                                        </Flex>
+                                      </Box>
+                                    </Box>
+                                  </Flex>
+                                )
+                              })}
+                            </VStack>
+                          ) : (
+                            <Box py={4} borderRadius="16px" textAlign="center"
+                              style={{ background: "#f0fdf4", border: "1.5px dashed #6ee7b7" }}>
+                              <Text fontSize="sm" color={MUTED}>No bus stops found nearby</Text>
+                            </Box>
+                          )}
+                        </Box>
+
+                      </VStack>
+                    )
+                  })()}
+                </Box>
               </Box>
             </>
           )}
@@ -1250,12 +1202,7 @@ function Dashboard() {
                       {scheduleData.routes.map((route, i) => (
                         <Flex key={i} align="center" justify="space-between" p={3} bg={INPUT_BG} borderRadius="8px" border={`1px solid ${BORDER}`}>
                           <Flex align="center" gap={3}>
-                            <Box
-                              px={2} py={1} borderRadius="4px"
-                              bg={i % 2 === 0 ? "#E1F5EE" : "#E6F1FB"}
-                              color={i % 2 === 0 ? "#0F6E56" : "#185FA5"}
-                              fontSize="xs" fontWeight="700" minW="32px" textAlign="center"
-                            >
+                            <Box px={2} py={1} borderRadius="4px" bg={i % 2 === 0 ? "#E1F5EE" : "#E6F1FB"} color={i % 2 === 0 ? "#0F6E56" : "#185FA5"} fontSize="xs" fontWeight="700" minW="32px" textAlign="center">
                               {route.route_name}
                             </Box>
                             <Text fontWeight="600" fontSize="sm" color={PRIMARY}>{route.destination}</Text>
@@ -1276,6 +1223,7 @@ function Dashboard() {
           </Portal>
         </Dialog.Root>
       </Container>
+
       <TripPlannerModal
         isOpen={plannerOpen}
         onClose={() => setPlannerOpen(false)}
