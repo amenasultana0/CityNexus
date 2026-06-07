@@ -36,14 +36,14 @@ def find_nearest_stops(
     session: Session,
     lat: float,
     lon: float,
-    stop_type: str | None = None,
+    stop_type: str | list[str] | None = None,
     radius_km: float = 0.5,
     max_count: int = 5,
 ) -> list[NearbyStop]:
     """
     Return up to max_count stops within radius_km of (lat, lon).
     Uses a bounding-box SQL filter first, then exact Haversine sort.
-    stop_type: 'metro' | 'bus' | 'mmts' | None (all types)
+    stop_type: 'metro' | 'bus' | 'mmts' | ['metro', 'mmts'] | None (all types)
     """
     # Bounding box — slightly larger than radius to avoid edge misses
     margin = (radius_km / _KM_PER_DEG_LAT) * 1.2
@@ -55,7 +55,10 @@ def find_nearest_stops(
         TransportStop.longitude.between(lon - lon_margin, lon + lon_margin),
     )
     if stop_type:
-        stmt = stmt.where(TransportStop.stop_type == stop_type)
+        if isinstance(stop_type, list):
+            stmt = stmt.where(TransportStop.stop_type.in_(stop_type))
+        else:
+            stmt = stmt.where(TransportStop.stop_type == stop_type)
 
     candidates = session.exec(stmt).all()
 
@@ -86,4 +89,15 @@ def nearest_stop_of_type(
 ) -> NearbyStop | None:
     """Return the single nearest stop of a given type within 2 km."""
     stops = find_nearest_stops(session, lat, lon, stop_type=stop_type, radius_km=2.0, max_count=1)
+    return stops[0] if stops else None
+
+
+def nearest_rail_stop(
+    session: Session,
+    lat: float,
+    lon: float,
+    radius_km: float = 2.0,
+) -> NearbyStop | None:
+    """Return the single closest metro-or-MMTS station within radius_km."""
+    stops = find_nearest_stops(session, lat, lon, stop_type=["metro", "mmts"], radius_km=radius_km, max_count=1)
     return stops[0] if stops else None

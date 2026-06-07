@@ -245,23 +245,21 @@ def transport_alternatives(
         is_festival=is_festival,
     )
 
-    metro_nearby = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="metro", radius_km=1.5, max_count=1
-    )
-    mmts_nearby = transport_svc.find_nearest_stops(
-        session, origin_lat, origin_lon, stop_type="mmts", radius_km=1.5, max_count=1
-    )
-    metro_accessible = len(metro_nearby) > 0 or len(mmts_nearby) > 0
+    # Origin-side rail accessibility — query metro+MMTS together, pick single closest
+    best_board   = transport_svc.nearest_rail_stop(session, origin_lat, origin_lon)
+    metro_accessible = best_board is not None
 
     bus_nearby = transport_svc.find_nearest_stops(
         session, origin_lat, origin_lon, stop_type="bus", radius_km=1.0, max_count=1
     )
     bus_accessible = len(bus_nearby) > 0
 
-    metro_board = transport_svc.nearest_stop_of_type(session, origin_lat, origin_lon, "metro")
-    metro_alight = transport_svc.nearest_stop_of_type(session, dest_lat, dest_lon, "metro")
-    bus_board = transport_svc.nearest_stop_of_type(session, origin_lat, origin_lon, "bus")
-    bus_alight = transport_svc.nearest_stop_of_type(session, dest_lat, dest_lon, "bus")
+    # Destination-side rail accessibility — same combined query
+    best_alight  = transport_svc.nearest_rail_stop(session, dest_lat, dest_lon)
+    bus_board    = transport_svc.nearest_stop_of_type(session, origin_lat, origin_lon, "bus")
+    bus_alight   = transport_svc.nearest_stop_of_type(session, dest_lat, dest_lon, "bus")
+
+    metro_dest_accessible = best_alight is not None
 
     options: list[TransportOption] = []
     for c in all_costs:
@@ -275,8 +273,10 @@ def transport_alternatives(
         board_walk_m = 0
         alight_walk_m = 0
         if c.mode == "metro":
-            if metro_board: board_walk_m = metro_board.distance_m
-            if metro_alight: alight_walk_m = metro_alight.distance_m
+            if best_board:
+                board_walk_m = best_board.distance_m
+            if best_alight:
+                alight_walk_m = best_alight.distance_m
         elif c.mode == "bus":
             if bus_board: board_walk_m = bus_board.distance_m
             if bus_alight: alight_walk_m = bus_alight.distance_m
@@ -290,10 +290,10 @@ def transport_alternatives(
         )
 
         stop_details: StopDetails | None = None
-        if c.mode == "metro" and metro_board and metro_alight:
+        if c.mode == "metro" and best_board and best_alight:
             stop_details = StopDetails(
-                board_at=f"{metro_board.name} ({metro_board.distance_m}m walk)",
-                alight_at=f"{metro_alight.name} ({metro_alight.distance_m}m walk)",
+                board_at=f"{best_board.name} ({best_board.distance_m}m walk)",
+                alight_at=f"{best_alight.name} ({best_alight.distance_m}m walk)",
             )
         elif c.mode == "bus" and bus_board and bus_alight:
             stop_details = StopDetails(
@@ -302,7 +302,9 @@ def transport_alternatives(
             )
 
         if c.mode == "metro" and not metro_accessible:
-            available, reason = False, "No metro station within 1.5 km"
+            available, reason = False, "No metro station within 1.5 km of origin"
+        elif c.mode == "metro" and not metro_dest_accessible:
+            available, reason = False, "No metro near destination"
         elif c.mode == "metro" and not _is_metro_operating(hour):
             available, reason = False, "Metro closed — operates 6:00 am to 11:00 pm"
         elif c.mode == "bus" and not bus_accessible:

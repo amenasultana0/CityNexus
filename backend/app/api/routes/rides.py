@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from app.services.cost import calculate_available_costs, travel_only_min
 from app.services.routes_service import get_road_distance
 from app.services import demand as demand_svc
+from app.services import transport as transport_svc
 
 from app.api.deps import SessionDep
 from app.models import AreaContext, RidePrediction, User
@@ -198,16 +199,17 @@ def _get_hourly_precip_forecast(n_hours: int, start_hour: int) -> list[float]:
         return [0.0] * n_hours
  
  
-def _pick_best_mode(costs) -> object:
+def _pick_best_mode(costs, metro_dest_accessible: bool = True) -> object:
     """
     From a list of CostResult pick the single best mode for an important trip:
-    prefer metro if available and competitive, else lowest-fare available cab/auto.
+    prefer metro if available and both origin+destination have metro access,
+    else lowest-fare available cab/auto.
     """
     available = [c for c in costs if c.available]
     if not available:
         return None
-    # Metro is always punctual — prefer it if fare is reasonable
-    metro = next((c for c in available if c.mode == "metro"), None)
+    # Only consider metro if the destination has a station within reach
+    metro = next((c for c in available if c.mode == "metro"), None) if metro_dest_accessible else None
     non_metro = [c for c in available if c.mode != "metro" and c.mode != "bus"]
     if not non_metro:
         return metro or available[0]
@@ -366,7 +368,13 @@ def plan_trip(body: PlanTripRequest, session: SessionDep) -> PlanTripResponse:
  
     # ── 3. Area context ───────────────────────────────────────
     area = demand_svc.get_area_context(session, body.origin_lat, body.origin_lon)
- 
+
+    # ── 3b. Destination metro accessibility ───────────────────
+    # Query metro+MMTS together so any rail station within 2 km counts
+    metro_dest_accessible = transport_svc.nearest_rail_stop(
+        session, body.dest_lat, body.dest_lon
+    ) is not None
+
     # ── 4. Arrive-by as total minutes from midnight ───────────
     arrive_total_min = body.arrive_by_hour * 60 + body.arrive_by_minute
  
@@ -412,7 +420,7 @@ def plan_trip(body: PlanTripRequest, session: SessionDep) -> PlanTripResponse:
         if not costs:
             continue
  
-        best_cost = _pick_best_mode(costs)
+        best_cost = _pick_best_mode(costs, metro_dest_accessible)
         if best_cost is None:
             continue
  
@@ -440,7 +448,7 @@ def plan_trip(body: PlanTripRequest, session: SessionDep) -> PlanTripResponse:
             passengers=1,
             precipitation_mm=0.0,
         )
-        best_cost = _pick_best_mode(costs) if costs else None
+        best_cost = _pick_best_mode(costs, metro_dest_accessible) if costs else None
         if best_cost:
             CANDIDATES.append((leave_total_min, best_cost, costs, d_info, 0.0, 10))
  
@@ -572,7 +580,7 @@ def plan_trip(body: PlanTripRequest, session: SessionDep) -> PlanTripResponse:
     _, _, all_costs_balanced, _, _, _ = balanced_candidate
     metro_cost = next((c for c in all_costs_balanced if c.mode == "metro"), None)
     metro_tip = None
-    if metro_cost and metro_cost.time_min < best_slot.duration_min * 0.85:
+    if metro_dest_accessible and metro_cost and metro_cost.time_min < best_slot.duration_min * 0.85:
         saved = best_slot.duration_min - metro_cost.time_min
         metro_tip = f"Metro saves ~{saved} min during this window — no surge, fixed fare ₹{int(metro_cost.final_cost_inr)}"
  

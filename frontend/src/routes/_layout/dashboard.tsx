@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import TripPlannerModal from "@/components/Common/TripPlannerModal"
 import { buildUberUrl, buildOlaUrl } from "@/utils/uberDeepLink"
@@ -8,7 +8,6 @@ import {
   Flex,
   Grid,
   Heading,
-  Input,
   Text,
   VStack,
   Dialog,
@@ -99,6 +98,19 @@ function modeColor(mode: string): string {
   return MODE_COLOR[mode] ?? "#6b7280"
 }
 
+function toTitleCase(str: string): string {
+  return str.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+}
+
+// Convert "16:00" → "4 PM", "09:00" → "9 AM"
+function to12hLabel(label: string): string {
+  if (!label) return label
+  const h = parseInt(label.split(":")[0], 10)
+  if (isNaN(h)) return label
+  const h12 = h % 12 || 12
+  return `${h12} ${h < 12 ? "AM" : "PM"}`
+}
+
 const PAGE_BG = "#f0f4f8"
 const CARD = "#ffffff"
 const CARD_SHADOW = "0 4px 16px rgba(0,0,0,0.08)"
@@ -129,24 +141,264 @@ function Card({ children, topColor, p = 6 }: { children: React.ReactNode; topCol
 }
 
 
+// ── Drum time picker ──────────────────────────────────────────────────────────
+
+function DrumColumn({
+  items,
+  selected,
+  isDisabled,
+  onSelect,
+  format,
+}: {
+  items: number[]
+  selected: number
+  isDisabled: (v: number) => boolean
+  onSelect: (v: number) => void
+  format: (v: number) => string
+}) {
+  const ITEM_H = 36
+  const selectedIdx = Math.max(0, items.indexOf(selected))
+
+  const step = (dir: number) => {
+    for (let i = selectedIdx + dir; i >= 0 && i < items.length; i += dir) {
+      if (!isDisabled(items[i])) { onSelect(items[i]); return }
+    }
+  }
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    step(e.deltaY > 0 ? 1 : -1)
+  }
+
+  return (
+    <Box
+      position="relative" h={`${ITEM_H * 5}px`} w="52px" overflow="hidden"
+      onWheel={handleWheel} style={{ userSelect: "none", cursor: "ns-resize" }}
+    >
+      {/* top fade */}
+      <Box position="absolute" top={0} left={0} right={0} h={`${ITEM_H * 2}px`} zIndex={2} pointerEvents="none"
+        style={{ background: "linear-gradient(to bottom, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0) 100%)" }} />
+      {/* centre highlight band */}
+      <Box position="absolute" left={0} right={0} h={`${ITEM_H}px`} zIndex={1}
+        style={{ top: `${ITEM_H * 2}px`, background: "rgba(26,86,219,0.07)", borderTop: "1.5px solid rgba(26,86,219,0.2)", borderBottom: "1.5px solid rgba(26,86,219,0.2)", borderRadius: "8px" }} />
+      {/* bottom fade */}
+      <Box position="absolute" bottom={0} left={0} right={0} h={`${ITEM_H * 2}px`} zIndex={2} pointerEvents="none"
+        style={{ background: "linear-gradient(to top, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0) 100%)" }} />
+      {/* scrolling list — translateY so selected item is at row 2 (centre) */}
+      <Box position="absolute" left={0} right={0}
+        style={{ top: `${(2 - selectedIdx) * ITEM_H}px`, transition: "top 0.2s cubic-bezier(0.22,1,0.36,1)" }}
+      >
+        {items.map((item) => {
+          const disabled = isDisabled(item)
+          const sel = item === selected
+          return (
+            <Box key={item} h={`${ITEM_H}px`} display="flex" alignItems="center" justifyContent="center"
+              onClick={() => !disabled && onSelect(item)}
+              style={{ cursor: disabled ? "not-allowed" : "pointer" }}
+            >
+              <Text
+                fontSize={sel ? "16px" : "14px"}
+                fontWeight={sel ? "700" : "400"}
+                color={disabled ? "#d0d0d0" : sel ? PRIMARY : MUTED}
+                style={{ transition: "all 0.15s ease" }}
+              >
+                {format(item)}
+              </Text>
+            </Box>
+          )
+        })}
+      </Box>
+    </Box>
+  )
+}
+
+function DrumTimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  // Capture current wall-clock time once at mount
+  const [mountTime] = useState(() => new Date())
+  const currentHour24 = mountTime.getHours()
+  const currentMinute = mountTime.getMinutes()
+
+  const parts = value.split(":")
+  const selectedHour24 = parseInt(parts[0] || "0", 10)
+  const selectedMinute = parseInt(parts[1] || "0", 10)
+
+  // Derived 12h display values
+  const selectedPeriod = selectedHour24 < 12 ? "AM" : "PM"
+  const selectedHour12 = selectedHour24 % 12 || 12
+
+  // Convert 12h + period back to 24h for internal state
+  const to24 = (h12: number, period: string) =>
+    period === "AM" ? (h12 === 12 ? 0 : h12) : (h12 === 12 ? 12 : h12 + 12)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", close)
+    return () => document.removeEventListener("mousedown", close)
+  }, [open])
+
+  // AM is fully disabled if the entire AM window has passed (it's noon or later)
+  const isAmDisabled = currentHour24 >= 12
+
+  // An individual 12h hour is past if its 24h equivalent is earlier than now
+  const isHourDisabled = (h12: number) => to24(h12, selectedPeriod) < currentHour24
+
+  // A minute is past if the selected hour is already past, or it equals the current hour
+  // and that specific minute has already ticked by
+  const isMinuteDisabled = (m: number) =>
+    selectedHour24 < currentHour24 ||
+    (selectedHour24 === currentHour24 && m < currentMinute)
+
+  const setHour = (h12: number) => {
+    if (isHourDisabled(h12)) return
+    const h24 = to24(h12, selectedPeriod)
+    let m = selectedMinute
+    if (h24 === currentHour24 && m < currentMinute) m = currentMinute
+    onChange(`${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`)
+  }
+
+  const setPeriod = (period: string) => {
+    if (period === "AM" && isAmDisabled) return
+    if (period === selectedPeriod) return
+    let h24 = to24(selectedHour12, period)
+    let m = selectedMinute
+    // If switching period lands us in the past, snap to current time
+    if (h24 < currentHour24) { h24 = currentHour24; m = currentMinute }
+    else if (h24 === currentHour24 && m < currentMinute) { m = currentMinute }
+    onChange(`${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`)
+  }
+
+  const setMinute = (m: number) => {
+    if (isMinuteDisabled(m)) return
+    onChange(`${String(selectedHour24).padStart(2, "0")}:${String(m).padStart(2, "0")}`)
+  }
+
+  const display = `${selectedHour12}:${String(selectedMinute).padStart(2, "0")} ${selectedPeriod}`
+  const hours12 = Array.from({ length: 12 }, (_, i) => i + 1)   // 1–12
+  const minutes  = Array.from({ length: 60 }, (_, i) => i)       // 0–59
+
+  return (
+    <Box ref={wrapRef} position="relative" flexShrink={0}>
+      {/* Trigger button */}
+      <Flex
+        align="center" gap={2} bg={INPUT_BG} borderRadius="12px" h="50px" px={3} cursor="pointer"
+        border={`1.5px solid ${open ? BLUE : BORDER}`}
+        onClick={() => setOpen((v) => !v)}
+        style={{ transition: "border-color 0.2s ease", minWidth: "128px" }}
+      >
+        <Text fontSize="1.1rem" lineHeight="1">🕐</Text>
+        <Text fontWeight="600" fontSize="sm" color={PRIMARY}>{display}</Text>
+      </Flex>
+
+      {/* Dropdown drum picker */}
+      {open && (
+        <Box
+          position="absolute" top="calc(100% + 8px)" left="0" zIndex={200}
+          bg={CARD} borderRadius="16px" p={4}
+          style={{ boxShadow: "0 12px 40px rgba(0,0,0,0.18)", border: `1px solid ${BORDER}`, minWidth: "210px" }}
+        >
+          <Text fontSize="0.6rem" color={MUTED} fontWeight="700" letterSpacing="1.2px" textTransform="uppercase" textAlign="center" mb={3}>
+            Select time
+          </Text>
+          <Flex align="center" justify="center" gap={2}>
+            {/* Hour drum — 1 to 12 */}
+            <DrumColumn
+              items={hours12}
+              selected={selectedHour12}
+              isDisabled={isHourDisabled}
+              onSelect={setHour}
+              format={(h) => String(h)}
+            />
+            <Text fontWeight="800" fontSize="xl" color={PRIMARY} style={{ marginTop: "-4px" }}>:</Text>
+            {/* Minute drum — 0 to 59 */}
+            <DrumColumn
+              items={minutes}
+              selected={selectedMinute}
+              isDisabled={isMinuteDisabled}
+              onSelect={setMinute}
+              format={(m) => String(m).padStart(2, "0")}
+            />
+            {/* AM / PM toggle */}
+            <Flex direction="column" gap={1.5} ml={1}>
+              {(["AM", "PM"] as const).map((p) => {
+                const disabled = p === "AM" && isAmDisabled
+                const active = selectedPeriod === p
+                return (
+                  <Box
+                    key={p} as="button"
+                    onClick={() => setPeriod(p)}
+                    px={3} py={1} borderRadius="7px" fontSize="12px" fontWeight="700"
+                    style={{
+                      background: active ? BLUE : disabled ? INPUT_BG : "#f0f4f8",
+                      color: active ? "#fff" : disabled ? "#c8c8c8" : MUTED,
+                      border: `1px solid ${active ? BLUE : BORDER}`,
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    {p}
+                  </Box>
+                )
+              })}
+            </Flex>
+          </Flex>
+          <Box mt={3} textAlign="center">
+            <Box
+              as="button" onClick={() => setOpen(false)} px={5} py={1.5} borderRadius="8px"
+              fontSize="13px" fontWeight="600" style={{ background: BLUE, color: "#fff", border: "none", cursor: "pointer" }}
+            >
+              Done
+            </Box>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+const _DASH_KEY = "citynexus_dashboard"
+function _readDashSession(): Record<string, unknown> {
+  try { const r = sessionStorage.getItem(_DASH_KEY); return r ? JSON.parse(r) : {} } catch { return {} }
+}
+
 function Dashboard() {
   const [selectedStop, setSelectedStop] = useState<any>(null)
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false)
-  const [passengers, setPassengers] = useState(1)
-  const [timeStr, setTimeStr] = useState(() => {
+  const [passengers, setPassengers] = useState<number>(() => (_readDashSession().passengers as number) ?? 1)
+  const [timeStr, setTimeStr] = useState<string>(() => {
+    const stored = _readDashSession().timeStr as string | undefined
+    if (stored) return stored
     const n = new Date()
     return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`
   })
-  const [formData, setFormData] = useState<FormData | null>(null)
+  const [formData, setFormData] = useState<FormData | null>(() => (_readDashSession().formData as FormData) ?? null)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [geoError, setGeoError] = useState("")
-  const [pickupText, setPickupText] = useState("")
+  const [pickupText, setPickupText] = useState<string>(() => (_readDashSession().pickupText as string) ?? "")
   const [sortMode, setSortMode] = useState<"best" | "cheapest" | "fastest">("best")
-  const [destText, setDestText] = useState("")
-  const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const [destLocation, setDestLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [destText, setDestText] = useState<string>(() => (_readDashSession().destText as string) ?? "")
+  const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(
+    () => (_readDashSession().pickupLocation as { lat: number; lng: number }) ?? null
+  )
+  const [destLocation, setDestLocation] = useState<{ lat: number; lng: number } | null>(
+    () => (_readDashSession().destLocation as { lat: number; lng: number }) ?? null
+  )
   const [plannerOpen, setPlannerOpen] = useState(false)
+
+  // Persist form state across navigation — restored via lazy useState initialisers above
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(_DASH_KEY, JSON.stringify({
+        passengers, timeStr, formData, pickupText, destText, pickupLocation, destLocation,
+      }))
+    } catch { /* storage full or unavailable — silently ignore */ }
+  }, [passengers, timeStr, formData, pickupText, destText, pickupLocation, destLocation])
+
   const pickupRef = useRef<google.maps.places.Autocomplete | null>(null)
   const destRef = useRef<google.maps.places.Autocomplete | null>(null)
   const alternativesRef = useRef<HTMLDivElement | null>(null)
@@ -233,6 +485,7 @@ function Dashboard() {
       }
       return predictCancellation(payload)
     },
+    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
 
@@ -243,16 +496,18 @@ function Dashboard() {
       dest_lat: formData!.destLat, dest_lon: formData!.destLon,
       hour: formData!.hour, day_of_week: formData!.dayOfWeek,
     }),
+    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
 
   const bestTimeQuery = useQuery({
-    queryKey: ["bestTime", formData],
+    queryKey: ["bestTime", formData?.originLat, formData?.originLon, formData?.destLat, formData?.destLon, formData?.dayOfWeek],
     queryFn: () => getBestTime({
       origin_lat: formData!.originLat, origin_lon: formData!.originLon,
       dest_lat: formData!.destLat, dest_lon: formData!.destLon,
-      current_hour: formData!.hour, day_of_week: formData!.dayOfWeek, lookahead_hours: 6,
+      current_hour: new Date().getHours(), day_of_week: formData!.dayOfWeek, lookahead_hours: 6,
     }),
+    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
 
@@ -264,13 +519,14 @@ function Dashboard() {
       passengers: formData!.passengers, hour: formData!.hour,
       day_of_week: formData!.dayOfWeek, is_raining: weatherQuery.data?.is_raining ?? false,
     }),
+    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
-
 
   const pickupQuery = useQuery({
     queryKey: ["pickup", formData],
     queryFn: () => getOptimalPickup({ origin_lat: formData!.originLat, origin_lon: formData!.originLon, radius_m: 1000 }),
+    staleTime: 10 * 60 * 1000,
     enabled: !!formData,
   })
 
@@ -478,9 +734,7 @@ function Dashboard() {
               </Flex>
 
               {/* Time */}
-              <Flex align="center" bg={INPUT_BG} borderRadius="12px" border={`1.5px solid ${BORDER}`} h="50px" px={3} flexShrink={0}>
-                <Input type="time" value={timeStr} onChange={(e) => setTimeStr(e.target.value)} border="none" bg="transparent" h="100%" color={PRIMARY} fontSize="sm" fontWeight="600" p={0} minW="100px" />
-              </Flex>
+              <DrumTimePicker value={timeStr} onChange={setTimeStr} />
 
               {/* Analyse button */}
               <UIButton onClick={handleSubmit} loading={isGeocoding} style={{ background: BLUE, color: "#fff", fontWeight: "600", borderRadius: "12px", height: "50px", padding: "0 28px", fontSize: "14px" }}>
@@ -659,11 +913,11 @@ function Dashboard() {
                         },
                         {
                           label: "Reliability",
-                          value: `${bestOption.reliability_score}/10`,
-                          sub: "score",
-                          color: bestOption.reliability_score >= 7 ? GREEN : bestOption.reliability_score >= 4 ? AMBER : RED,
+                          value: reliabilityQuery.data ? `${reliabilityQuery.data.score}/10` : undefined,
+                          sub: reliabilityQuery.data?.label ?? "score",
+                          color: reliabilityQuery.data ? (reliabilityQuery.data.score >= 7 ? GREEN : reliabilityQuery.data.score >= 4 ? AMBER : RED) : PRIMARY,
                           capitalize: false,
-                          isLoading: false,
+                          isLoading: reliabilityQuery.isLoading,
                         },
                       ] as const).map((stat, i) => (
                         <Box
@@ -871,12 +1125,11 @@ function Dashboard() {
                     ((riskOrderMap[o.risk_level] ?? 1) / 2) * 0.35 + (o.cost_inr / maxCost) * 0.35 + (o.time_min / maxTime) * 0.30
 
                   const sorted = [...alternativesQuery.data.options].sort((a, b) => {
-                    if (a === bestOption) return -1
-                    if (b === bestOption) return 1
                     if (a.available && !b.available) return -1
                     if (!a.available && b.available) return 1
-                    if (sortMode === "best") return bestScore(a) - bestScore(b)
-                    return sortMode === "cheapest" ? a.cost_inr - b.cost_inr : a.time_min - b.time_min
+                    if (sortMode === "cheapest") return a.cost_inr - b.cost_inr
+                    if (sortMode === "fastest") return a.time_min - b.time_min
+                    return bestScore(a) - bestScore(b)
                   })
 
                   return (
@@ -948,11 +1201,13 @@ function Dashboard() {
                   const slots = bestTimeQuery.data.slots
                   const bestSlot = bestTimeQuery.data.best_slot
                   const currentSlot = slots[0]
-                  const chartData = slots.map((s) => ({
-                    time: s.time_label,
-                    rate: Math.round(s.cancel_risk * 100),
-                    isBest: s.time_label === bestSlot?.time_label,
-                  }))
+                  const chartData = slots
+                    .filter((s) => s.time_label && s.time_label.trim())
+                    .map((s) => ({
+                      time: to12hLabel(s.time_label),
+                      rate: Math.round(s.cancel_risk * 100),
+                      isBest: s.time_label === bestSlot?.time_label,
+                    }))
                   return (
                     <>
                       <ResponsiveContainer width="100%" height={220}>
@@ -998,12 +1253,12 @@ function Dashboard() {
                         <Box w="14px" h="14px" borderRadius="3px" bg={GREEN} flexShrink={0} />
                         <Text fontSize="sm" color={PRIMARY} lineHeight="1.6">
                           Leaving at{" "}
-                          <Text as="span" color={BLUE} fontWeight="700">{currentSlot?.time_label}</Text>
+                          <Text as="span" color={BLUE} fontWeight="700">{to12hLabel(currentSlot?.time_label ?? "")}</Text>
                           {" "}gives you a{" "}
                           <Text as="span" color={AMBER} fontWeight="700">{Math.round((currentSlot?.cancel_risk ?? 0) * 100)}% cancellation rate</Text>
                           {bestSlot && bestSlot.time_label !== currentSlot?.time_label && (
                             <> · Best window today is{" "}
-                              <Text as="span" color={GREEN} fontWeight="700">{bestSlot.time_label}</Text>
+                              <Text as="span" color={GREEN} fontWeight="700">{to12hLabel(bestSlot.time_label)}</Text>
                               {" "}at just {Math.round(bestSlot.cancel_risk * 100)}%.
                             </>
                           )}
@@ -1077,7 +1332,7 @@ function Dashboard() {
                                         }}>
                                         <Flex justify="space-between" align="center">
                                           <Box>
-                                            <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{stop.name}</Text>
+                                            <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{toTitleCase(stop.name)}</Text>
                                             <Flex align="center" gap={2} mt="3px">
                                               <Text fontSize="0.68rem" color={MUTED}>{stop.walk_min} min walk</Text>
                                               <Box w="3px" h="3px" borderRadius="full" bg={SUBTLE} flexShrink={0} />
@@ -1090,7 +1345,7 @@ function Dashboard() {
                                             padding: "4px 12px", borderRadius: "999px", whiteSpace: "nowrap",
                                             boxShadow: `0 4px 12px ${isMetro ? "rgba(29,78,216,0.4)" : "rgba(217,119,6,0.4)"}`,
                                           }}>
-                                            ↓{stop.risk_reduction_pct}%
+                                            ↓{stop.risk_reduction_pct}% risk
                                           </Box>
                                         </Flex>
                                       </Box>
@@ -1144,7 +1399,7 @@ function Dashboard() {
                                         }}>
                                         <Flex justify="space-between" align="center">
                                           <Box>
-                                            <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{stop.name}</Text>
+                                            <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{toTitleCase(stop.name)}</Text>
                                             <Flex align="center" gap={2} mt="3px">
                                               <Text fontSize="0.68rem" color={MUTED}>{stop.walk_min} min walk</Text>
                                               <Box w="3px" h="3px" borderRadius="full" bg={SUBTLE} flexShrink={0} />
@@ -1157,7 +1412,7 @@ function Dashboard() {
                                             padding: "4px 12px", borderRadius: "999px", whiteSpace: "nowrap",
                                             boxShadow: "0 4px 12px rgba(5,150,105,0.4)",
                                           }}>
-                                            ↓{stop.risk_reduction_pct}%
+                                            ↓{stop.risk_reduction_pct}% risk
                                           </Box>
                                         </Flex>
                                       </Box>
