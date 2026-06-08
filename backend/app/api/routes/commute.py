@@ -226,6 +226,10 @@ def _is_metro_operating(hour: int) -> bool:
     return 6 <= hour <= 22
 
 
+def _is_bus_operating(hour: int) -> bool:
+    return 5 <= hour <= 22
+
+
 # ── Endpoint ──────────────────────────────────────────────────
 
 @router.post("/weekly-plan", response_model=WeeklyPlanResponse)
@@ -249,7 +253,7 @@ def weekly_plan(body: WeeklyPlanRequest, session: SessionDep) -> Any:
         session, body.origin_lat, body.origin_lon,
         stop_type="bus", radius_km=1.0, max_count=1
     )
-    bus_accessible = len(bus_nearby) > 0
+    bus_accessible = len(bus_nearby) > 0 and _is_bus_operating(dep_hour)
 
     # Fetch holidays and weather forecast
     holidays = _fetch_indian_holidays(today, end_date)

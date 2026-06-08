@@ -142,6 +142,10 @@ def _is_metro_operating(hour: int) -> bool:
     return 6 <= hour <= 22
 
 
+def _is_bus_operating(hour: int) -> bool:
+    return 5 <= hour <= 22
+
+
 def _bus_wait_adjusted(hour: int, day_of_week: int, bus_stop_count: int) -> int:
     base = bus_wait_min(hour, day_of_week)
     if bus_stop_count >= 5:
@@ -307,6 +311,8 @@ def transport_alternatives(
             available, reason = False, "No metro near destination"
         elif c.mode == "metro" and not _is_metro_operating(hour):
             available, reason = False, "Metro closed — operates 6:00 am to 11:00 pm"
+        elif c.mode == "bus" and not _is_bus_operating(hour):
+            available, reason = False, "Bus service closed — operates 5:00 am to 10:30 pm"
         elif c.mode == "bus" and not bus_accessible:
             available, reason = False, "No bus stop within 1 km"
         elif not c.available:

@@ -188,7 +188,7 @@ def _travel_time_min(mode: str, distance_km: float, hour: int) -> int:
 def bus_wait_min(hour: int, day_of_week: int) -> int:
     is_peak = hour in {7, 8, 9, 17, 18, 19, 20} and day_of_week < 5
     if is_peak: return 15
-    if hour >= 22 or hour <= 5: return 45
+    if hour == 5 or hour == 22: return 45  # sparse first/last hour of service
     return 30
 
 
