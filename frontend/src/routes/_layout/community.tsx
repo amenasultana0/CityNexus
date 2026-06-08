@@ -112,6 +112,10 @@ async function upvoteReport(id: number): Promise<Disruption> {
   return res.json()
 }
 
+async function resolveReport(id: number): Promise<void> {
+  await fetch(`/api/v1/community/disruptions/${id}/resolve`, { method: "POST" })
+}
+
 function CommunityPage() {
   const qc = useQueryClient()
   const [mapCenter, setMapCenter]         = useState(HYD_CENTER)
@@ -164,6 +168,11 @@ function CommunityPage() {
       setUpvotedIds((prev) => new Set(prev).add(updated.id))
       qc.invalidateQueries({ queryKey: ["disruptions"] })
     },
+  })
+
+  const resolveMutation = useMutation({
+    mutationFn: resolveReport,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["disruptions"] }),
   })
 
   const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
@@ -342,7 +351,7 @@ function CommunityPage() {
                 <Box w="9px" h="9px" borderRadius="full" bg="#10b981"
                   style={{ animation: "pulseRing 2s ease-in-out infinite" }} />
                 <Text fontSize="0.62rem" color="rgba(255,255,255,0.55)" fontWeight="700" letterSpacing="2.5px" textTransform="uppercase">
-                  Live Community · Hyderabad
+                  HydAlert · Live Feed
                 </Text>
               </Flex>
 
@@ -359,10 +368,10 @@ function CommunityPage() {
                   animation: "gradientShift 6s ease infinite",
                 }}
               >
-                Commute<br />Community
+                Hyderabad<br />Alert
               </Heading>
               <Text color="rgba(255,255,255,0.5)" fontSize="md" maxW="420px" lineHeight="1.65">
-                Crowd-sourced disruptions from your fellow Hyderabad commuters — real-time, no fluff.
+                Live disruption alerts from Hyderabad commuters — report road blocks, metro issues, flooding and more in real-time.
               </Text>
             </Box>
 
@@ -395,7 +404,7 @@ function CommunityPage() {
           </Flex>
 
           {/* ── Glassmorphism stat cards ── */}
-          <Grid templateColumns={{ base: "1fr 1fr", md: "repeat(4,1fr)" }} gap={4}>
+          <Grid templateColumns={{ base: "1fr 1fr", md: "repeat(3,1fr)" }} gap={4}>
             {[
               {
                 label: "Live Reports",
@@ -412,14 +421,6 @@ function CommunityPage() {
                 accent: "#fbbf24",
                 icon: null,
                 delay: "0.08s",
-              },
-              {
-                label: "Auto-Expires",
-                value: "6h",
-                unit: "Reports auto-clear",
-                accent: "#60a5fa",
-                icon: "⏱️",
-                delay: "0.16s",
               },
               {
                 label: "Feed Status",
@@ -984,6 +985,23 @@ function CommunityPage() {
                                 <span style={{ opacity: 0.75 }}>
                                   {alreadyUpvoted ? "· Confirmed!" : "· Confirm"}
                                 </span>
+                              </button>
+                              <button
+                                onClick={() => resolveMutation.mutate(d.id)}
+                                style={{
+                                  padding: "5px 12px",
+                                  borderRadius: "999px",
+                                  border: `1.5px solid #e2e8f0`,
+                                  fontWeight: "700",
+                                  fontSize: "12px",
+                                  cursor: "pointer",
+                                  background: "#fff",
+                                  color: "#718096",
+                                  marginLeft: "6px",
+                                }}
+                                title="Mark as resolved"
+                              >
+                                ✅ Resolved
                               </button>
                             </Flex>
                           </Box>

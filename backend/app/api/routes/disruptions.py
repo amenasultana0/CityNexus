@@ -16,8 +16,6 @@ from app.models import DisruptionReport
 
 router = APIRouter(tags=["community"])
 
-# Auto-expire reports after 6 hours
-EXPIRY_HOURS = 6
 
 
 # ── Request / Response models ─────────────────────────────────
@@ -75,26 +73,11 @@ def _to_response(d: DisruptionReport) -> DisruptionResponse:
     )
 
 
-def _expire_old(session: SessionDep) -> None:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=EXPIRY_HOURS)
-    old = session.exec(
-        select(DisruptionReport).where(
-            DisruptionReport.is_active == True,
-            DisruptionReport.reported_at < cutoff,
-        )
-    ).all()
-    for d in old:
-        d.is_active = False
-        session.add(d)
-    if old:
-        session.commit()
-
 
 # ── Endpoints ─────────────────────────────────────────────────
 
 @router.post("/report", response_model=DisruptionResponse)
 def report_disruption(body: DisruptionCreate, session: SessionDep) -> Any:
-    _expire_old(session)
     valid_categories = {"metro", "auto", "road", "flooding", "police", "accident", "other"}
     if body.category not in valid_categories:
         raise HTTPException(status_code=422, detail=f"category must be one of {valid_categories}")
@@ -123,7 +106,6 @@ def get_disruptions(
     radius_km: float = Query(default=10.0, ge=0.5, le=50.0),
     category: str | None = Query(default=None),
 ) -> Any:
-    _expire_old(session)
 
     query = select(DisruptionReport).where(DisruptionReport.is_active == True)
     if category:
@@ -159,7 +141,6 @@ def upvote_disruption(report_id: int, session: SessionDep) -> Any:
 
 @router.get("/disruptions/stats")
 def disruption_stats(session: SessionDep) -> Any:
-    _expire_old(session)
     active = session.exec(
         select(DisruptionReport).where(DisruptionReport.is_active == True)
     ).all()
@@ -170,3 +151,13 @@ def disruption_stats(session: SessionDep) -> Any:
         "total_active": len(active),
         "by_category": by_category,
     }
+
+@router.post("/disruptions/{report_id}/resolve")
+def resolve_disruption(report_id: int, session: SessionDep) -> Any:
+    report = session.get(DisruptionReport, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report.is_active = False
+    session.add(report)
+    session.commit()
+    return {"status": "resolved"}

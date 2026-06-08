@@ -21,7 +21,7 @@ const mainItems = [
   { icon: FiMap, title: "City Heatmap", path: "/heatmap" },
   { icon: FiCalendar, title: "Weekly Commute", path: "/weekly" },
   { icon: FiBarChart2, title: "Model Insights", path: "/insights" },
-  { icon: FiAlertTriangle, title: "Community", path: "/community" },
+  { icon: FiAlertTriangle, title: "HydAlert", path: "/community" },
 ]
 
 interface SidebarItemsProps {
