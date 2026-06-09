@@ -20,7 +20,7 @@ from app.services import transport as transport_svc
 from app.api.deps import SessionDep
 from app.models import AreaContext, RidePrediction, User
 from app.services import demand, weather
-from app.services.ml_model import RideFeatures, hybrid_predict, predict_cancellation_risk
+from app.services.ml_model import RideFeatures, hybrid_predict, predict_cancellation_risk, rule_based_probability
 
 router = APIRouter(tags=["rides"])
 
@@ -753,7 +753,36 @@ def route_reliability(
         session, origin_lat, origin_lon, hour, day_of_week
     )
 
-    score = max(1, min(10, round((1.0 - demand_info.cancel_rate) * 10)))
+    is_peak = _is_peak(hour, day_of_week)
+    area = _nearest_area(session, origin_lat, origin_lon)
+    distance_km = _haversine_km(origin_lat, origin_lon, dest_lat, dest_lon) * _ROAD_FACTOR
+    wx_impact = weather.get_weather_impact(origin_lat, origin_lon)
+
+    features = RideFeatures(
+        hour=hour,
+        day_of_week=day_of_week,
+        month=datetime.now().month,
+        is_peak_hour=int(is_peak),
+        is_weekend=1 if day_of_week >= 5 else 0,
+        distance_km=distance_km,
+        historical_cancel_rate=demand_info.cancel_rate,
+        metro_count_1km=area.metro_count_1km if area else 0,
+        bus_stop_count_1km=area.bus_stop_count_1km if area else 0,
+        traffic_chokepoint_nearby=int(area.traffic_chokepoint_nearby) if area else 0,
+        is_flood_prone=int(area.is_flood_prone) if area else 0,
+    )
+    ml_result = predict_cancellation_risk(features)
+    result = hybrid_predict(
+        ml_prob=ml_result["cancel_probability"],
+        base_cancel_rate=demand_info.cancel_rate,
+        hour=hour,
+        day_of_week=day_of_week,
+        is_peak_hour=is_peak,
+        risk_multiplier=wx_impact["risk_multiplier"],
+    )
+    adjusted_rate = result["cancel_probability"]
+
+    score = max(1, min(10, round((1.0 - adjusted_rate) * 10)))
     if score >= 7:
         label = "Reliable"
     elif score >= 4:
@@ -761,9 +790,9 @@ def route_reliability(
     else:
         label = "Unreliable"
 
-    avg_wait_min = max(3, round(demand_info.cancel_rate * 20))
+    avg_wait_min = max(3, round(adjusted_rate * 20))
 
-    if demand_info.risk_level == "high" or demand_info.cancel_rate > 0.55:
+    if adjusted_rate > 0.55:
         recommended_modes = ["metro", "bus"]
     else:
         recommended_modes = ["cab_mini", "auto", "metro"]
@@ -773,7 +802,7 @@ def route_reliability(
     return RouteReliabilityResponse(
         score=score,
         label=label,
-        cancel_rate=demand_info.cancel_rate,
+        cancel_rate=adjusted_rate,
         avg_wait_min=avg_wait_min,
         surge_frequency=surge_frequency,
         recommended_modes=recommended_modes,
@@ -795,7 +824,12 @@ def best_time_to_leave(
     Scan the next N hours and colour-code each slot (green/yellow/red).
     Returns the earliest green or yellow slot as the recommended departure.
     """
-    wx = weather.get_weather()
+    wx_impact = weather.get_weather_impact(origin_lat, origin_lon)
+    risk_multiplier = wx_impact["risk_multiplier"]
+    is_raining = wx_impact["is_raining"]
+    area = _nearest_area(session, origin_lat, origin_lon)
+    distance_km = _haversine_km(origin_lat, origin_lon, dest_lat, dest_lon) * _ROAD_FACTOR
+    month = datetime.now().month
     slots: list[TimeSlot] = []
 
     for offset in range(lookahead_hours):
@@ -806,11 +840,35 @@ def best_time_to_leave(
         demand_info = demand.get_demand_for_location(session, origin_lat, origin_lon, h, d)
 
         peak = _is_peak(h, d)
-        surge = 2.0 if (wx.is_raining or peak) else 1.0
+        surge = 2.0 if (is_raining or peak) else 1.0
 
-        if demand_info.cancel_rate < 0.40 and not (wx.is_raining and peak):
+        features = RideFeatures(
+            hour=h,
+            day_of_week=d,
+            month=month,
+            is_peak_hour=int(peak),
+            is_weekend=1 if d >= 5 else 0,
+            distance_km=distance_km,
+            historical_cancel_rate=demand_info.cancel_rate,
+            metro_count_1km=area.metro_count_1km if area else 0,
+            bus_stop_count_1km=area.bus_stop_count_1km if area else 0,
+            traffic_chokepoint_nearby=int(area.traffic_chokepoint_nearby) if area else 0,
+            is_flood_prone=int(area.is_flood_prone) if area else 0,
+        )
+        ml_result = predict_cancellation_risk(features)
+        slot_result = hybrid_predict(
+            ml_prob=ml_result["cancel_probability"],
+            base_cancel_rate=demand_info.cancel_rate,
+            hour=h,
+            day_of_week=d,
+            is_peak_hour=peak,
+            risk_multiplier=risk_multiplier,
+        )
+        adjusted_rate = slot_result["cancel_probability"]
+
+        if adjusted_rate < 0.40 and not (is_raining and peak):
             color = "green"
-        elif demand_info.cancel_rate < 0.60 and not (wx.is_raining and peak):
+        elif adjusted_rate < 0.60 and not (is_raining and peak):
             color = "yellow"
         else:
             color = "red"
@@ -819,7 +877,7 @@ def best_time_to_leave(
             hour=h,
             time_label=f"{h:02d}:00",
             color=color,
-            cancel_risk=demand_info.cancel_rate,
+            cancel_risk=adjusted_rate,
             surge=surge,
             risk_level=demand_info.risk_level,
         ))
