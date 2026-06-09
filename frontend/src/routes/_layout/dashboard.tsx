@@ -360,44 +360,25 @@ function DrumTimePicker({ value, onChange }: { value: string; onChange: (v: stri
   )
 }
 
-const _DASH_KEY = "citynexus_dashboard"
-function _readDashSession(): Record<string, unknown> {
-  try { const r = sessionStorage.getItem(_DASH_KEY); return r ? JSON.parse(r) : {} } catch { return {} }
-}
 
 function Dashboard() {
   const [selectedStop, setSelectedStop] = useState<any>(null)
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false)
-  const [passengers, setPassengers] = useState<number>(() => (_readDashSession().passengers as number) ?? 1)
+  const [passengers, setPassengers] = useState<number>(1)
   const [timeStr, setTimeStr] = useState<string>(() => {
-    const stored = _readDashSession().timeStr as string | undefined
-    if (stored) return stored
     const n = new Date()
     return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`
   })
-  const [formData, setFormData] = useState<FormData | null>(() => (_readDashSession().formData as FormData) ?? null)
+  const [formData, setFormData] = useState<FormData | null>(null)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [geoError, setGeoError] = useState("")
-  const [pickupText, setPickupText] = useState<string>(() => (_readDashSession().pickupText as string) ?? "")
+  const [pickupText, setPickupText] = useState<string>("")
   const [sortMode, setSortMode] = useState<"best" | "cheapest" | "fastest">("best")
-  const [destText, setDestText] = useState<string>(() => (_readDashSession().destText as string) ?? "")
-  const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(
-    () => (_readDashSession().pickupLocation as { lat: number; lng: number }) ?? null
-  )
-  const [destLocation, setDestLocation] = useState<{ lat: number; lng: number } | null>(
-    () => (_readDashSession().destLocation as { lat: number; lng: number }) ?? null
-  )
+  const [destText, setDestText] = useState<string>("")
+  const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [destLocation, setDestLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [plannerOpen, setPlannerOpen] = useState(false)
-
-  // Persist form state across navigation — restored via lazy useState initialisers above
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(_DASH_KEY, JSON.stringify({
-        passengers, timeStr, formData, pickupText, destText, pickupLocation, destLocation,
-      }))
-    } catch { /* storage full or unavailable — silently ignore */ }
-  }, [passengers, timeStr, formData, pickupText, destText, pickupLocation, destLocation])
 
   const pickupRef = useRef<google.maps.places.Autocomplete | null>(null)
   const destRef = useRef<google.maps.places.Autocomplete | null>(null)
@@ -469,7 +450,6 @@ function Dashboard() {
   const weatherQuery = useQuery({
     queryKey: ["weather", formData?.originLat, formData?.originLon],
     queryFn: () => getWeatherImpact(formData!.originLat, formData!.originLon),
-    staleTime: 15 * 60 * 1000,
     enabled: !!formData,
   })
 
@@ -485,7 +465,6 @@ function Dashboard() {
       }
       return predictCancellation(payload)
     },
-    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
 
@@ -496,7 +475,6 @@ function Dashboard() {
       dest_lat: formData!.destLat, dest_lon: formData!.destLon,
       hour: formData!.hour, day_of_week: formData!.dayOfWeek,
     }),
-    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
 
@@ -507,7 +485,6 @@ function Dashboard() {
       dest_lat: formData!.destLat, dest_lon: formData!.destLon,
       current_hour: new Date().getHours(), day_of_week: formData!.dayOfWeek, lookahead_hours: 6,
     }),
-    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
 
@@ -519,14 +496,12 @@ function Dashboard() {
       passengers: formData!.passengers, hour: formData!.hour,
       day_of_week: formData!.dayOfWeek, is_raining: weatherQuery.data?.is_raining ?? false,
     }),
-    staleTime: 5 * 60 * 1000,
     enabled: !!formData,
   })
 
   const pickupQuery = useQuery({
     queryKey: ["pickup", formData],
     queryFn: () => getOptimalPickup({ origin_lat: formData!.originLat, origin_lon: formData!.originLon, radius_m: 1000 }),
-    staleTime: 10 * 60 * 1000,
     enabled: !!formData,
   })
 
