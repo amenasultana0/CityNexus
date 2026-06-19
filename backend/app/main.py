@@ -1,13 +1,13 @@
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
+from pathlib import Path
 
 from app.api.main import api_router
 from app.core.config import settings
-
 from app.api.routes.utils import router as utils_router
-
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -23,7 +23,7 @@ app = FastAPI(
     generate_unique_id_function=custom_generate_unique_id,
 )
 
-# Set all CORS enabled origins
+# CORS
 if settings.all_cors_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -32,6 +32,11 @@ if settings.all_cors_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# Serve uploaded disruption photos as static files at /uploads/disruptions/<filename>
+UPLOAD_DIR = Path("/app/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(utils_router, prefix=settings.API_V1_STR)
