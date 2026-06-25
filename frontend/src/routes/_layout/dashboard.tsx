@@ -1259,6 +1259,11 @@ function Dashboard() {
                     const nearbyBus = allStops.filter((s: any) => s.stop_type === "bus").slice(0, 4)
                     const makeClickHandler = (stop: any) => async () => {
                       setSelectedStop(stop)
+                      if (stop.stop_type === "metro" || stop.stop_type === "mmts") {
+                        setScheduleData(null)
+                        setIsLoadingSchedule(false)
+                        return
+                      }
                       setIsLoadingSchedule(true)
                       try {
                         const data = await getBusStopSchedule(stop.name, formData?.hour)
@@ -1420,10 +1425,25 @@ function Dashboard() {
             <Dialog.Positioner>
               <Dialog.Content style={{ background: "#ffffff", borderRadius: "16px" }}>
                 <Dialog.Header>
-                  <Dialog.Title>{selectedStop?.name} Schedule</Dialog.Title>
+                  <Dialog.Title>
+                    {selectedStop?.stop_type === "metro" || selectedStop?.stop_type === "mmts"
+                      ? `${selectedStop?.name}`
+                      : `${selectedStop?.name} Schedule`}
+                  </Dialog.Title>
                 </Dialog.Header>
                 <Dialog.Body>
-                  {isLoadingSchedule ? (
+                  {selectedStop?.stop_type === "metro" || selectedStop?.stop_type === "mmts" ? (
+                    <VStack gap={3} align="stretch">
+                      <Flex align="center" gap={3} p={3} bg={INPUT_BG} borderRadius="10px" border={`1px solid ${BORDER}`}>
+                        <Box style={{ fontSize: "1.6rem" }}>{selectedStop?.stop_type === "metro" ? "🚇" : "🚆"}</Box>
+                        <VStack align="start" gap={0}>
+                          <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{selectedStop?.stop_type === "metro" ? "Metro Station" : "MMTS Station"}</Text>
+                          <Text fontSize="xs" color={MUTED}>{selectedStop?.distance_km != null ? `${(selectedStop.distance_km * 1000).toFixed(0)} m away` : "Nearby"}</Text>
+                        </VStack>
+                      </Flex>
+                      <Text fontSize="sm" color={MUTED}>Live schedules for metro/MMTS are not available here. Please check the official Hyderabad Metro app or MMTS website for timings.</Text>
+                    </VStack>
+                  ) : isLoadingSchedule ? (
                     <VStack gap={3}><Skeleton h="56px" /><Skeleton h="56px" /><Skeleton h="56px" /></VStack>
                   ) : scheduleData?.error ? (
                     <Text color={RED} fontSize="sm">{scheduleData.error}</Text>
