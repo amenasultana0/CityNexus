@@ -102,6 +102,7 @@ services:
       context: ./frontend
       args:
         - VITE_API_URL=http://localhost:8000
+        - VITE_GOOGLE_MAPS_KEY=${GOOGLE_MAPS_FRONTEND_KEY}
         - NODE_ENV=development
 
   playwright:

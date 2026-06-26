@@ -90,6 +90,30 @@ const MODE_COLOR: Record<string, string> = {
   cab: "#6b7280", "cab-mini": "#6b7280", "cab-sedan": "#6b7280", "cab-suv": "#6b7280",
 }
 
+const DISRUPTION_CAT: Record<string, { emoji: string; label: string }> = {
+  road_block:   { emoji: "🚧", label: "Road Block" },
+  accident:     { emoji: "🚨", label: "Accident" },
+  flooding:     { emoji: "🌊", label: "Flooding" },
+  waterlogging: { emoji: "🌧️", label: "Waterlogging" },
+  construction: { emoji: "🏗️", label: "Construction" },
+  signal_down:  { emoji: "🚦", label: "Signal Down" },
+  pothole:      { emoji: "🕳️", label: "Pothole" },
+  metro_issue:  { emoji: "🚇", label: "Metro Issue" },
+  bus_delay:    { emoji: "🚌", label: "Bus Delay" },
+  auto_strike:  { emoji: "🛺", label: "Auto Strike" },
+  cab_surge:    { emoji: "🚕", label: "Cab Surge" },
+  mmts_issue:   { emoji: "🚂", label: "MMTS Issue" },
+  police_naaka: { emoji: "👮", label: "Police Naaka" },
+  vehicle_fire: { emoji: "🔥", label: "Vehicle Fire" },
+  vip_movement: { emoji: "🚓", label: "VIP Movement" },
+  visibility:   { emoji: "🌫️", label: "Dust / Fog" },
+  power_outage: { emoji: "⚡", label: "Power Outage" },
+  procession:   { emoji: "🎉", label: "Procession" },
+  religious:    { emoji: "🙏", label: "Religious Gathering" },
+  stadium:      { emoji: "🏟️", label: "Stadium Traffic" },
+  other:        { emoji: "⚠️", label: "Other" },
+}
+
 function modeEmoji(mode: string, variant?: string | null): string {
   if (variant) return MODE_EMOJI[`${mode}-${variant}`] ?? MODE_EMOJI[mode] ?? "🚌"
   return MODE_EMOJI[mode] ?? "🚌"
@@ -505,6 +529,36 @@ function Dashboard() {
     enabled: !!formData,
   })
 
+  const routeDisruptionsQuery = useQuery({
+    queryKey: ["routeDisruptions", formData?.originLat, formData?.originLon, formData?.destLat, formData?.destLon],
+    queryFn: async () => {
+      const midLat = (formData!.originLat + formData!.destLat) / 2
+      const midLon = (formData!.originLon + formData!.destLon) / 2
+      const points = [
+        { lat: formData!.originLat, lon: formData!.originLon },
+        { lat: midLat,              lon: midLon              },
+        { lat: formData!.destLat,   lon: formData!.destLon   },
+      ]
+      const results = await Promise.all(
+        points.map((p) =>
+          fetch(`/api/v1/community/disruptions?lat=${p.lat}&lon=${p.lon}&radius_km=2.5`)
+            .then((r) => (r.ok ? r.json() : { disruptions: [] }))
+            .catch(() => ({ disruptions: [] }))
+        )
+      )
+      const seen = new Set<number>()
+      const combined: any[] = []
+      for (const r of results) {
+        for (const d of (r.disruptions ?? [])) {
+          if (!seen.has(d.id)) { seen.add(d.id); combined.push(d) }
+        }
+      }
+      return { disruptions: combined }
+    },
+    enabled: !!formData,
+    refetchInterval: 120000,
+  })
+
   const bestOption = (() => {
     const available = alternativesQuery.data?.options.filter((o) => o.available)
     if (!available || available.length === 0) return undefined
@@ -537,6 +591,11 @@ function Dashboard() {
         @keyframes pulseDot {
           0%,100% { box-shadow: 0 0 0 0   rgba(16,185,129,0.55); }
           50%     { box-shadow: 0 0 0 7px rgba(16,185,129,0);    }
+        }
+        @keyframes pulseRingRed {
+          0%   { box-shadow: 0 0 0 0   rgba(239,68,68,0.7); }
+          70%  { box-shadow: 0 0 0 8px rgba(239,68,68,0);   }
+          100% { box-shadow: 0 0 0 0   rgba(239,68,68,0);   }
         }
         .hero-gradient-bar {
           height: 3px;
@@ -742,6 +801,68 @@ function Dashboard() {
             </Card>
           ) : (
             <>
+              {/* ── Route Disruption Warning ── */}
+              {(() => {
+                const activeReports = (routeDisruptionsQuery.data?.disruptions ?? []).slice(0, 4)
+                if (!activeReports.length) return null
+                const confirmedCount = activeReports.filter((d: any) => d.upvotes >= 1).length
+                return (
+                  <Box borderRadius="18px" overflow="hidden" style={{
+                    background: "linear-gradient(135deg,#fef2f2 0%,#fff7ed 100%)",
+                    border: "1.5px solid #fca5a5",
+                    boxShadow: "0 4px 20px rgba(239,68,68,0.1)",
+                  }}>
+                    <Box px={5} py={3} style={{ background: "linear-gradient(135deg,#ef4444,#dc2626)", borderBottom: "1px solid #fca5a5" }}>
+                      <Flex align="center" gap={2}>
+                        <Box w="7px" h="7px" borderRadius="full" bg="#fecaca" flexShrink={0}
+                          style={{ animation: "pulseRingRed 2s ease-in-out infinite" }} />
+                        <Text fontSize="0.62rem" color="rgba(255,255,255,0.9)" fontWeight="800" letterSpacing="2px" textTransform="uppercase">
+                          ⚠ Active Community Reports On Your Route
+                        </Text>
+                        <Box flex={1} />
+                        <Box px={2} py={0.5} borderRadius="full"
+                          style={{ background: "rgba(255,255,255,0.2)", fontSize: "0.6rem", fontWeight: "800", color: "#fff" }}>
+                          {activeReports.length} report{activeReports.length !== 1 ? "s" : ""}
+                        </Box>
+                      </Flex>
+                    </Box>
+                    <VStack gap={0} align="stretch" px={5} py={3}>
+                      {activeReports.map((d: any, i: number) => {
+                        const cat = DISRUPTION_CAT[d.category] ?? DISRUPTION_CAT.other
+                        const confirmed = d.upvotes >= 1
+                        return (
+                          <Flex key={d.id} align="center" gap={3} py={2.5}
+                            style={{ borderBottom: i < activeReports.length - 1 ? `1px solid #fee2e2` : "none" }}>
+                            <Text fontSize="1.1rem" flexShrink={0}>{cat.emoji}</Text>
+                            <Box flex={1} minW={0}>
+                              <Text fontSize="sm" fontWeight="700" color="#991b1b">
+                                {cat.label}
+                                {d.location_name ? ` · ${d.location_name}` : ""}
+                              </Text>
+                            </Box>
+                            <Flex align="center" gap={1} px={2} py={0.5} borderRadius="full" flexShrink={0}
+                              style={{
+                                background: confirmed ? "#fee2e2" : "#f1f5f9",
+                                border: `1px solid ${confirmed ? "#fca5a5" : "#e2e8f0"}`,
+                              }}>
+                              <Text fontSize="0.65rem" fontWeight="700"
+                                style={{ color: confirmed ? "#b91c1c" : "#718096" }}>
+                                {confirmed ? `👍 ${d.upvotes}` : "Unverified"}
+                              </Text>
+                            </Flex>
+                          </Flex>
+                        )
+                      })}
+                      {confirmedCount === 0 && (
+                        <Text fontSize="0.65rem" color="#92400e" mt={1}>
+                          These are unverified reports — confirm on HydAlert if you spot them
+                        </Text>
+                      )}
+                    </VStack>
+                  </Box>
+                )
+              })()}
+
               {/* ── Hero Recommendation Banner ── */}
               {alternativesQuery.isLoading ? (
                 <Box className="hero-card" borderRadius="24px" overflow="hidden" style={{ background: "linear-gradient(135deg,#eef2ff 0%,#faf5ff 55%,#ecfdf5 100%)", border: "1px solid rgba(139,92,246,0.12)", boxShadow: "0 8px 40px rgba(0,0,0,0.07)" }}>

@@ -31,13 +31,17 @@ export const Route = createFileRoute("/_layout/insights")({
 // ─── Static data ─────────────────────────────────────────────────────────────
 
 const FEATURE_IMPORTANCE = [
-  { feature: "hour", importance: 0.22 },
-  { feature: "cancel_rate_area", importance: 0.19 },
-  { feature: "driver_supply", importance: 0.15 },
-  { feature: "is_raining", importance: 0.13 },
-  { feature: "day_of_week", importance: 0.11 },
-  { feature: "demand_score", importance: 0.10 },
-  { feature: "distance_km", importance: 0.10 },
+  { feature: "historical_cancel_rate", importance: 0.24 },
+  { feature: "hour", importance: 0.16 },
+  { feature: "is_peak_hour", importance: 0.13 },
+  { feature: "bus_stop_count_1km", importance: 0.11 },
+  { feature: "day_of_week", importance: 0.09 },
+  { feature: "is_weekend", importance: 0.07 },
+  { feature: "metro_count_1km", importance: 0.07 },
+  { feature: "distance_km", importance: 0.06 },
+  { feature: "traffic_chokepoint_nearby", importance: 0.04 },
+  { feature: "month", importance: 0.02 },
+  { feature: "is_flood_prone", importance: 0.01 },
 ]
 
 const RISK_DISTRIBUTION = [
@@ -46,13 +50,12 @@ const RISK_DISTRIBUTION = [
   { name: "High Risk", value: 21, color: "#e53e3e" },
 ]
 
-// Confusion matrix: [[TP, FP], [FN, TN]] — rows = actual, cols = predicted
-// Actual: High Risk | Low Risk  /  Predicted: High Risk | Low Risk
+// Confusion matrix: rows = actual, cols = predicted (Cancelled = positive class)
 const CONFUSION_MATRIX = {
-  tp: 1821,  // Predicted high, actually high
-  fp: 312,   // Predicted high, actually low
-  fn: 289,   // Predicted low, actually high
-  tn: 2478,  // Predicted low, actually low
+  tp: 1695,  // Predicted cancelled, actually cancelled
+  fp: 281,   // Predicted cancelled, actually not cancelled
+  fn: 265,   // Predicted not cancelled, actually cancelled
+  tn: 2659,  // Predicted not cancelled, actually not cancelled
 }
 
 const HOW_IT_WORKS = [
@@ -84,7 +87,7 @@ const HOW_IT_WORKS = [
     step: 5,
     title: "Build Feature Vector",
     detail:
-      "7 features are assembled: hour, day, month, metro density, cancel rate, rain, demand score.",
+      "11 features are assembled: hour, day_of_week, month, is_peak_hour, is_weekend, distance_km, historical_cancel_rate, metro_count_1km, bus_stop_count_1km, traffic_chokepoint_nearby, is_flood_prone.",
   },
   {
     step: 6,
@@ -96,14 +99,13 @@ const HOW_IT_WORKS = [
     step: 7,
     title: "Score → Risk Level",
     detail:
-      "Probability < 0.40 → Low, 0.40–0.65 → Moderate, > 0.65 → High. All predictions stored for analytics.",
+      "Probability < 0.35 → Low, 0.35–0.55 → Moderate, ≥ 0.55 → High. All predictions stored for analytics.",
   },
 ]
 
 const CLASS_RECALL = [
-  { label: "Low Risk", recall: "100.00%", color: "#10b981" },
-  { label: "Medium Risk", recall: "56.88%", color: "#f59e0b" },
-  { label: "High Risk", recall: "73.39%", color: "#ef4444" },
+  { label: "Not Cancelled", recall: "90.4%", color: "#10b981" },
+  { label: "Cancelled", recall: "86.5%", color: "#ef4444" },
 ]
 
 const DATA_STATS = [
@@ -192,7 +194,7 @@ function InsightsPage() {
               </Flex>
               <Text color="gray.500" fontSize="sm">
                 {isMLActive
-                  ? `Training accuracy: ${accuracy}% · 7 features · XGBoost classifier`
+                  ? `Training accuracy: ${accuracy}% · 11 features · XGBoost classifier`
                   : "XGBoost model unavailable — using rule-based heuristics"}
               </Text>
             </Box>
@@ -234,19 +236,19 @@ function InsightsPage() {
             <Heading size="sm" color="gray.500" mb={4}>
               FEATURE IMPORTANCE (XGBoost)
             </Heading>
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={330}>
               <BarChart
                 data={[...FEATURE_IMPORTANCE].sort(
                   (a, b) => a.importance - b.importance,
                 )}
                 layout="vertical"
-                margin={{ left: 120, right: 40, top: 5, bottom: 5 }}
+                margin={{ left: 180, right: 40, top: 5, bottom: 5 }}
               >
                 <XAxis
                   type="number"
                   tick={{ fill: "#888", fontSize: 11 }}
                   tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
-                  domain={[0, 0.25]}
+                  domain={[0, 0.28]}
                 />
                 <YAxis
                   type="category"
@@ -321,7 +323,7 @@ function InsightsPage() {
                   color="gray.500"
                   textAlign="center"
                 >
-                  Pred: High Risk
+                  Pred: Cancelled
                 </Text>
                 <Text
                   fontSize="xs"
@@ -329,7 +331,7 @@ function InsightsPage() {
                   color="gray.500"
                   textAlign="center"
                 >
-                  Pred: Low Risk
+                  Pred: Not Cancelled
                 </Text>
 
                 <Text
@@ -339,7 +341,7 @@ function InsightsPage() {
                   display="flex"
                   alignItems="center"
                 >
-                  Actual: High Risk
+                  Actual: Cancelled
                 </Text>
                 <Box
                   bg="green.500/20"
@@ -379,7 +381,7 @@ function InsightsPage() {
                   display="flex"
                   alignItems="center"
                 >
-                  Actual: Low Risk
+                  Actual: Not Cancelled
                 </Text>
                 <Box
                   bg="red.500/10"
@@ -457,7 +459,7 @@ function InsightsPage() {
           <Heading size="sm" color="gray.500" mb={4}>
             PER-CLASS RECALL (Test Set)
           </Heading>
-          <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={4}>
+          <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={4}>
             {CLASS_RECALL.map((c) => (
               <Box
                 key={c.label}
@@ -479,7 +481,7 @@ function InsightsPage() {
             ))}
           </Grid>
           <Text fontSize="xs" color="gray.500" mt={4}>
-            Overall Accuracy: <strong>88.85%</strong> · Low recall is 100% because all low-risk trips are correctly classified. Medium recall (56.88%) reflects class overlap. High recall (73.39%) shows strong detection of high-risk bookings.
+            Overall Accuracy: <strong>88.85%</strong> · The model is a binary classifier (Cancelled / Not Cancelled). Not Cancelled recall (90.4%) = TN / (TN + FP). Cancelled recall (86.5%) = TP / (TP + FN). Risk levels (Low / Medium / High) are derived post-prediction from probability thresholds.
           </Text>
         </Box>
 

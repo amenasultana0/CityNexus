@@ -65,6 +65,49 @@ function pinMarkerUrl(color: string, emoji: string) {
 
 type LocationPoint = { lat: number; lng: number }
 
+interface DisruptionMarker {
+  id: number
+  lat: number
+  lon: number
+  category: string
+  location_name: string | null
+  upvotes: number
+  minutes_ago: number
+}
+
+const DISRUPTION_INFO: Record<string, { emoji: string; color: string; label: string }> = {
+  road_block:   { emoji: "🚧", color: "#ef4444", label: "Road Block" },
+  accident:     { emoji: "🚨", color: "#dc2626", label: "Accident" },
+  flooding:     { emoji: "🌊", color: "#3b82f6", label: "Flooding" },
+  waterlogging: { emoji: "🌧️", color: "#0891b2", label: "Waterlogging" },
+  construction: { emoji: "🏗️", color: "#a16207", label: "Construction" },
+  signal_down:  { emoji: "🚦", color: "#dc2626", label: "Signal Down" },
+  pothole:      { emoji: "🕳️", color: "#78716c", label: "Pothole" },
+  metro_issue:  { emoji: "🚇", color: "#0694a2", label: "Metro Issue" },
+  bus_delay:    { emoji: "🚌", color: "#1a56db", label: "Bus Delay" },
+  auto_strike:  { emoji: "🛺", color: "#f59e0b", label: "Auto Strike" },
+  police_naaka: { emoji: "👮", color: "#7c3aed", label: "Police Naaka" },
+  vehicle_fire: { emoji: "🔥", color: "#ea580c", label: "Vehicle Fire" },
+  vip_movement: { emoji: "🚓", color: "#0369a1", label: "VIP Movement" },
+  procession:   { emoji: "🎉", color: "#7c3aed", label: "Procession" },
+  other:        { emoji: "⚠️", color: "#718096", label: "Disruption" },
+}
+
+function disruptionInfo(cat: string) {
+  return DISRUPTION_INFO[cat] ?? DISRUPTION_INFO.other
+}
+
+function disruptionMarkerUrl(cat: string, upvotes: number) {
+  const info = disruptionInfo(cat)
+  const size = upvotes >= 5 ? 44 : upvotes >= 2 ? 38 : 32
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+    `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="${size/2}" cy="${size/2}" r="${size/2-2}" fill="${info.color}" stroke="white" stroke-width="2.5" opacity="0.92"/>
+      <text x="${size/2}" y="${size/2+5}" text-anchor="middle" font-size="${size*0.44}" font-family="sans-serif">${info.emoji}</text>
+    </svg>`
+  )}`
+}
+
 // ── Stop card ─────────────────────────────────────────────────
 function StopCard({
   stop, index, onClick, isSelected,
@@ -194,6 +237,9 @@ function HeatmapPage() {
   const [directions, setDirections]           = useState<google.maps.DirectionsResult | null>(null)
   const [pickupStopRoutes, setPickupStopRoutes]           = useState<google.maps.DirectionsResult[]>([])
   const [destinationStopRoutes, setDestinationStopRoutes] = useState<google.maps.DirectionsResult[]>([])
+  const [disruptions, setDisruptions]                     = useState<DisruptionMarker[]>([])
+  const [selectedDisruption, setSelectedDisruption]       = useState<DisruptionMarker | null>(null)
+  const [showTraffic, setShowTraffic]                     = useState(true)
 
   const mapRef      = useRef<google.maps.Map | null>(null)
   const pickupRef   = useRef<google.maps.places.Autocomplete | null>(null)
@@ -246,6 +292,17 @@ function HeatmapPage() {
     bounds.extend(origin)
     bounds.extend(destination)
     mapRef.current.fitBounds(bounds)
+  }, [origin, destination])
+
+  // Fetch community disruptions along route
+  useEffect(() => {
+    if (!origin || !destination) return
+    const midLat = (origin.lat + destination.lat) / 2
+    const midLon = (origin.lng + destination.lng) / 2
+    fetch(`/api/v1/community/disruptions?lat=${midLat}&lon=${midLon}&radius_km=10`)
+      .then((r) => (r.ok ? r.json() : { disruptions: [] }))
+      .then((data) => setDisruptions(data.disruptions ?? []))
+      .catch(() => {})
   }, [origin, destination])
 
   // Build directions
@@ -513,6 +570,25 @@ function HeatmapPage() {
               <>🔍 Find Nearby Transit</>
             )}
           </button>
+
+          {/* Traffic toggle */}
+          <button
+            onClick={() => setShowTraffic((v) => !v)}
+            style={{
+              width: "100%", padding: "10px 13px", borderRadius: "12px", marginTop: "8px",
+              border: `1.5px solid ${showTraffic ? "#f59e0b" : BORDER}`,
+              fontWeight: "700", fontSize: "13px", cursor: "pointer",
+              background: showTraffic ? "linear-gradient(135deg,#fffbeb,#fef3c7)" : INPUT_BG,
+              color: showTraffic ? "#92400e" : MUTED,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+              boxShadow: showTraffic ? "0 2px 10px rgba(245,158,11,0.2)" : "none",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <Box w="10px" h="10px" borderRadius="full" flexShrink={0}
+              style={{ background: showTraffic ? "linear-gradient(135deg,#22c55e,#f59e0b,#ef4444)" : "#cbd5e0" }} />
+            {showTraffic ? "Traffic Layer ON" : "Traffic Layer OFF"}
+          </button>
         </Box>
 
         {/* ── Results area ── */}
@@ -577,6 +653,18 @@ function HeatmapPage() {
                     <Box w="28px" h="5px" borderRadius="full" style={{ background: "linear-gradient(90deg, #22c55e, #f59e0b, #ef4444)" }} flexShrink={0} />
                     <Text fontSize="xs" color={MUTED} fontWeight="600">Traffic (low → heavy)</Text>
                   </Flex>
+                  {disruptions.length > 0 && (
+                    <>
+                      <Box h="1px" bg={BORDER} />
+                      <Flex align="center" gap={2.5}>
+                        <Box w="24px" h="24px" borderRadius="full" display="flex" alignItems="center" justifyContent="center" fontSize="0.8rem" flexShrink={0}
+                          style={{ background: "#fee2e2", border: "1px solid #fca5a5" }}>
+                          ⚠️
+                        </Box>
+                        <Text fontSize="xs" color={MUTED} fontWeight="600">Community reports ({disruptions.length})</Text>
+                      </Flex>
+                    </>
+                  )}
                 </VStack>
               </Box>
             </Box>
@@ -612,6 +700,58 @@ function HeatmapPage() {
                     onClick={() => setSelectedStop(selectedStop?.name === stop.name && selectedStop?.lon === stop.lon ? null : stop)}
                   />
                 ))}
+              </VStack>
+            </Box>
+          )}
+
+          {/* ── Disruptions on Route ── */}
+          {disruptions.length > 0 && (
+            <Box mb={5} style={{ animation: "slideUpFade 0.45s 0.15s both" }}>
+              <SectionHeader emoji="⚠️" label="Disruptions" color="#ef4444" count={disruptions.length} />
+              <VStack gap={2} align="stretch">
+                {disruptions.map((d, i) => {
+                  const info = disruptionInfo(d.category)
+                  const isSelected = selectedDisruption?.id === d.id
+                  return (
+                    <Box
+                      key={d.id}
+                      as="button"
+                      w="full"
+                      textAlign="left"
+                      onClick={() => { setSelectedDisruption(isSelected ? null : d); setSelectedStop(null) }}
+                      style={{
+                        animation: `floatIn 0.4s ${i * 0.07}s cubic-bezier(0.22,1,0.36,1) both`,
+                        background: isSelected ? `${info.color}12` : `${info.color}06`,
+                        border: `1.5px solid ${isSelected ? info.color : `${info.color}22`}`,
+                        borderLeft: `4px solid ${info.color}`,
+                        borderRadius: "14px",
+                        padding: "12px 14px",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                        boxShadow: isSelected ? `0 4px 16px ${info.color}25` : "0 1px 4px rgba(0,0,0,0.04)",
+                      }}
+                    >
+                      <Flex align="center" gap={3}>
+                        <Text fontSize="1.2rem" flexShrink={0}>{info.emoji}</Text>
+                        <Box flex={1} minW={0}>
+                          <Text fontWeight="700" fontSize="sm" color={PRIMARY}>{info.label}</Text>
+                          {d.location_name && (
+                            <Text fontSize="0.68rem" color={MUTED}
+                              style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              📍 {d.location_name}
+                            </Text>
+                          )}
+                        </Box>
+                        {d.upvotes > 0 && (
+                          <Flex align="center" gap={1} px={2} py={0.5} borderRadius="full" flexShrink={0}
+                            style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                            <Text fontSize="0.6rem" color="#16a34a" fontWeight="700">👍 {d.upvotes}</Text>
+                          </Flex>
+                        )}
+                      </Flex>
+                    </Box>
+                  )
+                })}
               </VStack>
             </Box>
           )}
@@ -709,7 +849,7 @@ function HeatmapPage() {
             mapTypeControl: false,
           }}
         >
-          <TrafficLayer />
+          {showTraffic && <TrafficLayer />}
 
           {/* Origin marker + zone */}
           {origin && (
@@ -755,9 +895,61 @@ function HeatmapPage() {
               key={`${stop.name}-${stop.lat}-${stop.lon}`}
               position={{ lat: stop.lat, lng: stop.lon }}
               icon={{ url: stopMarkerUrl(stop.stop_type), scaledSize: new google.maps.Size(40, 40) }}
-              onClick={() => setSelectedStop(selectedStop?.lat === stop.lat && selectedStop?.lon === stop.lon ? null : stop)}
+              onClick={() => {
+                setSelectedDisruption(null)
+                setSelectedStop(selectedStop?.lat === stop.lat && selectedStop?.lon === stop.lon ? null : stop)
+              }}
             />
           ))}
+
+          {/* Community disruption markers */}
+          {disruptions.map((d) => (
+            <Marker
+              key={`disruption-${d.id}`}
+              position={{ lat: d.lat, lng: d.lon }}
+              icon={{ url: disruptionMarkerUrl(d.category, d.upvotes), scaledSize: new google.maps.Size(d.upvotes >= 5 ? 44 : d.upvotes >= 2 ? 38 : 32, d.upvotes >= 5 ? 44 : d.upvotes >= 2 ? 38 : 32) }}
+              zIndex={20}
+              onClick={() => {
+                setSelectedStop(null)
+                setSelectedDisruption(selectedDisruption?.id === d.id ? null : d)
+              }}
+            />
+          ))}
+
+          {/* Disruption info window */}
+          {selectedDisruption && (() => {
+            const info = disruptionInfo(selectedDisruption.category)
+            const minsAgo = selectedDisruption.minutes_ago
+            const timeLabel = minsAgo < 1 ? "just now" : minsAgo < 60 ? `${minsAgo}m ago` : `${Math.floor(minsAgo / 60)}h ago`
+            return (
+              <InfoWindow
+                position={{ lat: selectedDisruption.lat, lng: selectedDisruption.lon }}
+                onCloseClick={() => setSelectedDisruption(null)}
+              >
+                <Box p={2} minW="180px">
+                  <Flex align="center" gap={2} mb={2}>
+                    <Box w="34px" h="34px" borderRadius="10px" display="flex" alignItems="center" justifyContent="center" fontSize="1.1rem" flexShrink={0}
+                      style={{ background: `${info.color}18`, border: `1.5px solid ${info.color}30` }}>
+                      {info.emoji}
+                    </Box>
+                    <Box>
+                      <Text fontWeight="800" fontSize="sm" color="#1a202c">{info.label}</Text>
+                      {selectedDisruption.location_name && (
+                        <Text fontSize="0.68rem" color="#718096">📍 {selectedDisruption.location_name}</Text>
+                      )}
+                    </Box>
+                  </Flex>
+                  <Flex align="center" justify="space-between" gap={3}>
+                    <Text fontSize="0.68rem" color="#a0aec0">{timeLabel}</Text>
+                    <Flex align="center" gap={1} px={2} py={0.5} borderRadius="full"
+                      style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                      <Text fontSize="0.68rem" color="#16a34a" fontWeight="700">👍 {selectedDisruption.upvotes} confirmed</Text>
+                    </Flex>
+                  </Flex>
+                </Box>
+              </InfoWindow>
+            )
+          })()}
 
           {/* Selected stop info window */}
           {selectedStop && (() => {

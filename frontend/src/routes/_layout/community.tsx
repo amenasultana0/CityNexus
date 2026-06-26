@@ -5,7 +5,7 @@ import {
 } from "@chakra-ui/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { Skeleton } from "@/components/ui/skeleton"
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from "@react-google-maps/api"
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api"
 
 export const Route = createFileRoute("/_layout/community")({
   component: CommunityPage,
@@ -99,12 +99,31 @@ function getCatGradient(color: string): string {
   return `linear-gradient(135deg, ${color}16, ${color}06)`
 }
 
-function timeAgo(minutes: number): string {
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function timeAgo(minutes: number, timestamp?: string): string {
   if (minutes < 1) return "just now"
   if (minutes < 60) return `${minutes}m ago`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return m === 0 ? `${h}h ago` : `${h}h ${m}m ago`
+  if (minutes < 48 * 60) {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    return m === 0 ? `${h}h ago` : `${h}h ${m}m ago`
+  }
+  if (timestamp) {
+    const date = new Date(timestamp)
+    const now = new Date()
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric", month: "short",
+      year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+    })
+  }
+  return `${Math.floor(minutes / (60 * 24))}d ago`
 }
 
 interface Comment {
@@ -233,7 +252,7 @@ function CommentSection({ report, cat }: { report: Disruption; cat: ReturnType<t
               <Box flex={1} px={3} py={2} borderRadius="12px"
                 style={{ background: `${cat.color}08`, border: `1px solid ${cat.color}18` }}>
                 <Text fontSize="0.78rem" color={PRIMARY} lineHeight="1.5">{c.text}</Text>
-                <Text fontSize="0.62rem" color={SUBTLE} mt={0.5}>{timeAgo(c.minutes_ago)}</Text>
+                <Text fontSize="0.62rem" color={SUBTLE} mt={0.5}>{timeAgo(c.minutes_ago, c.posted_at)}</Text>
               </Box>
             </Flex>
           ))}
@@ -280,6 +299,10 @@ function CommunityPage() {
   const [formLat, setFormLat]                   = useState(HYD_CENTER.lat)
   const [formLon, setFormLon]                   = useState(HYD_CENTER.lng)
   const [filterCategory, setFilterCategory]     = useState<string | null>(null)
+  const [searchText, setSearchText]             = useState("")
+  const [searchLat, setSearchLat]               = useState<number | null>(null)
+  const [searchLng, setSearchLng]               = useState<number | null>(null)
+  const searchAcRef = useRef<google.maps.places.Autocomplete | null>(null)
   const [submitError, setSubmitError]           = useState("")
   const [upvotedIds, setUpvotedIds]             = useState<Set<number>>(new Set())
   const [resolveVotedIds, setResolveVotedIds]   = useState<Set<number>>(new Set())
@@ -358,6 +381,10 @@ function CommunityPage() {
   const handleSubmit = () => {
     setSubmitError("")
     if (!formLocation.trim()) { setSubmitError("Location name is required — e.g. Ameerpet Metro Station"); return }
+    if (!locationPinned && formLat === HYD_CENTER.lat && formLon === HYD_CENTER.lng) {
+      setSubmitError("Please click the map to pin the exact location of the incident")
+      return
+    }
     if (formCategory === "other" && !formDesc.trim()) { setSubmitError("Please describe the issue when selecting 'Other'"); return }
     if (photoRequired && !photoFile) { setSubmitError(`A photo is required for "${getCategoryInfo(formCategory).label}" reports`); return }
     const fd = new FormData()
@@ -378,7 +405,18 @@ function CommunityPage() {
   }
 
   const disruptions = disruptionsQuery.data?.disruptions ?? []
-  const filtered = filterCategory ? disruptions.filter((d) => d.category === filterCategory) : disruptions
+  const filtered = disruptions.filter((d) => {
+    const matchCat = filterCategory ? d.category === filterCategory : true
+    let matchSearch = true
+    if (searchLat !== null && searchLng !== null) {
+      matchSearch = haversineKm(searchLat, searchLng, d.lat, d.lon) <= 2.5
+    } else if (searchText.trim()) {
+      const q = searchText.toLowerCase()
+      matchSearch = (d.location_name ?? "").toLowerCase().includes(q) ||
+        (d.description ?? "").toLowerCase().includes(q)
+    }
+    return matchCat && matchSearch
+  })
   const byCat: Record<string, number> = {}
   disruptions.forEach((d) => { byCat[d.category] = (byCat[d.category] ?? 0) + 1 })
   const topCategory = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0]
@@ -629,6 +667,82 @@ function CommunityPage() {
             </Flex>
           </Box>
 
+          {/* ── Area Search ── */}
+          <Box style={{ animation: "slideUpFade 0.5s 0.12s both" }}>
+            <Flex
+              align="center" gap={2} px={4} borderRadius="18px"
+              style={{
+                background: CARD,
+                border: `1.5px solid ${searchText ? TEAL : BORDER}`,
+                boxShadow: searchText ? `0 0 0 3px ${TEAL}18, 0 4px 16px rgba(0,0,0,0.06)` : "0 4px 16px rgba(0,0,0,0.05)",
+                transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                height: "48px",
+              }}
+            >
+              <Text fontSize="1rem" flexShrink={0} style={{ opacity: searchText ? 1 : 0.45, lineHeight: 1 }}>🔍</Text>
+              {isLoaded ? (
+                <Autocomplete
+                  onLoad={(ref) => (searchAcRef.current = ref)}
+                  onPlaceChanged={() => {
+                    const place = searchAcRef.current?.getPlace()
+                    if (place?.geometry?.location) {
+                      setSearchLat(place.geometry.location.lat())
+                      setSearchLng(place.geometry.location.lng())
+                      setSearchText(place.name || place.formatted_address || searchText)
+                    }
+                  }}
+                  options={{
+                    componentRestrictions: { country: "in" },
+                    bounds: new google.maps.LatLngBounds({ lat: 17.2, lng: 78.2 }, { lat: 17.6, lng: 78.7 }),
+                    strictBounds: false,
+                    types: ["geocode", "establishment"],
+                  }}
+                >
+                  <input
+                    placeholder="Search area… e.g. Ameerpet, Hitech City, Gachibowli"
+                    value={searchText}
+                    onChange={(e) => {
+                      setSearchText(e.target.value)
+                      setSearchLat(null)
+                      setSearchLng(null)
+                    }}
+                    style={{
+                      flex: 1, width: "100%", border: "none", outline: "none", background: "transparent",
+                      fontSize: "14px", color: PRIMARY, fontFamily: "inherit", height: "46px",
+                    }}
+                  />
+                </Autocomplete>
+              ) : (
+                <input
+                  placeholder="Search area… e.g. Ameerpet, Hitech City"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  style={{
+                    flex: 1, border: "none", outline: "none", background: "transparent",
+                    fontSize: "14px", color: PRIMARY, fontFamily: "inherit", height: "46px",
+                  }}
+                />
+              )}
+              {searchText && (
+                <>
+                  <Box px={2.5} py={0.5} borderRadius="full" flexShrink={0}
+                    style={{ background: `${TEAL}12`, border: `1px solid ${TEAL}30`, fontSize: "0.65rem", fontWeight: "700", color: TEAL, whiteSpace: "nowrap" }}>
+                    {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+                  </Box>
+                  <button onClick={() => { setSearchText(""); setSearchLat(null); setSearchLng(null) }} style={{
+                    border: "none", background: "none", cursor: "pointer", color: MUTED,
+                    fontSize: "16px", lineHeight: 1, padding: "0 2px", flexShrink: 0,
+                  }}>✕</button>
+                </>
+              )}
+            </Flex>
+            {searchLat !== null && (
+              <Text fontSize="0.65rem" color={TEAL} fontWeight="600" mt={1.5} ml={1}>
+                📍 Showing reports within 2.5 km · <span style={{ color: MUTED, fontWeight: 500 }}>tap ✕ to clear</span>
+              </Text>
+            )}
+          </Box>
+
           {/* ══ REPORT FORM ══ */}
           {showForm && (
             <Box style={{
@@ -751,10 +865,12 @@ function CommunityPage() {
                     <Text fontSize="0.68rem" color={SUBTLE}>JPG, PNG or WebP · max 5 MB</Text>
                   </Box>
                 ) : (
-                  <Box className="photo-preview-enter" style={{ position: "relative", borderRadius: "16px", overflow: "hidden" }}>
+                  <Box className="photo-preview-enter" style={{ position: "relative", borderRadius: "16px", overflow: "hidden", textAlign: "center", background: "rgba(0,0,0,0.03)", border: `1.5px solid ${BORDER}` }}>
                     <img src={photoPreview} alt="Report preview" style={{
-                      width: "100%", maxHeight: "220px", objectFit: "cover", display: "block",
-                      borderRadius: "16px", border: `1.5px solid ${BORDER}`,
+                      display: "block", margin: "0 auto",
+                      maxWidth: "100%", width: "auto",
+                      maxHeight: "260px", height: "auto",
+                      borderRadius: "14px",
                     }} />
                     <button onClick={handleRemovePhoto} style={{
                       position: "absolute", top: "10px", right: "10px",
@@ -906,16 +1022,21 @@ function CommunityPage() {
                           </Box>
                         </Flex>
                         {selectedMarker.photo_url && (
-                          <Box mb={2} borderRadius="8px" overflow="hidden">
+                          <Box mb={2} style={{ textAlign: "center" }}>
                             <img src={selectedMarker.photo_url} alt="Report photo"
-                              style={{ width: "100%", maxHeight: "120px", objectFit: "cover", display: "block" }} />
+                              style={{
+                                display: "block", margin: "0 auto",
+                                maxWidth: "100%", width: "auto",
+                                maxHeight: "150px", height: "auto",
+                                borderRadius: "8px",
+                              }} />
                           </Box>
                         )}
                         {selectedMarker.description && (
                           <Text fontSize="sm" color={PRIMARY} mb={2} lineHeight="1.5">{selectedMarker.description}</Text>
                         )}
                         <Flex align="center" justify="space-between">
-                          <Text fontSize="0.68rem" color={SUBTLE}>{timeAgo(selectedMarker.minutes_ago)}</Text>
+                          <Text fontSize="0.68rem" color={SUBTLE}>{timeAgo(selectedMarker.minutes_ago, selectedMarker.reported_at)}</Text>
                           <Flex align="center" gap={1} px={2} py={0.5} borderRadius="full"
                             style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
                             <Text fontSize="0.68rem" color="#16a34a" fontWeight="700">
@@ -1047,10 +1168,15 @@ function CommunityPage() {
                             )}
 
                             {d.photo_url && (
-                              <Box mb={2} borderRadius="10px" overflow="hidden"
-                                style={{ border: `1px solid ${cat.color}22` }}>
+                              <Box mb={2}>
                                 <img src={d.photo_url} alt="Report photo"
-                                  style={{ width: "100%", maxHeight: "140px", objectFit: "cover", display: "block" }} />
+                                  style={{
+                                    display: "block", margin: "0 auto",
+                                    maxWidth: "100%", width: "auto",
+                                    maxHeight: "280px", height: "auto",
+                                    borderRadius: "10px",
+                                    border: `1px solid ${cat.color}22`,
+                                  }} />
                               </Box>
                             )}
 
@@ -1063,7 +1189,7 @@ function CommunityPage() {
 
                             {/* Footer row */}
                             <Flex align="center" justify="space-between" flexWrap="wrap" gap={2}>
-                              <Text fontSize="0.68rem" color={SUBTLE} fontWeight="600">{timeAgo(d.minutes_ago)}</Text>
+                              <Text fontSize="0.68rem" color={SUBTLE} fontWeight="600">{timeAgo(d.minutes_ago, d.reported_at)}</Text>
                               <Flex gap={2} flexWrap="wrap">
 
                                 {/* Comment toggle */}

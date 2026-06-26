@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Box, Flex, Text, VStack } from "@chakra-ui/react"
+import { Autocomplete, useJsApiLoader } from "@react-google-maps/api"
 import {
   X, Clock, Calendar, AlertTriangle, CloudRain,
   ChevronDown, ChevronUp, MapPin
@@ -11,6 +12,8 @@ import {
   type PlanTripResponse,
   type TransportOption,
 } from "@/lib/api"
+
+const LIBRARIES: ("places")[] = ["places"]
 
 // ── Theme tokens ──────────────────────────────────────────────
 const CARD    = "#ffffff"
@@ -114,12 +117,40 @@ export default function TripPlannerModal({
 }: TripPlannerModalProps) {
   const [originText, setOriginText] = useState(initialOrigin)
   const [destText,   setDestText]   = useState(initialDest)
+  const [originCoords, setOriginCoords] = useState<{ lat: number; lon: number } | null>(
+    initialOriginLat && initialOriginLon ? { lat: initialOriginLat, lon: initialOriginLon } : null
+  )
+  const [destCoords, setDestCoords] = useState<{ lat: number; lon: number } | null>(
+    initialDestLat && initialDestLon ? { lat: initialDestLat, lon: initialDestLon } : null
+  )
   const [arriveTime, setArriveTime] = useState("09:00")
   const [dayOffset,  setDayOffset]  = useState(1)
   const [loading,    setLoading]    = useState(false)
   const [result,     setResult]     = useState<PlanResult | null>(null)
   const [error,      setError]      = useState<string | null>(null)
   const [showAlts,   setShowAlts]   = useState(true)
+
+  const pickupRef = useRef<google.maps.places.Autocomplete | null>(null)
+  const destRef   = useRef<google.maps.places.Autocomplete | null>(null)
+
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_KEY,
+    libraries: LIBRARIES,
+  })
+
+  const onPickupPlaceChanged = () => {
+    const place = pickupRef.current?.getPlace()
+    if (!place?.geometry?.location) return
+    setOriginText(place.formatted_address || place.name || "")
+    setOriginCoords({ lat: place.geometry.location.lat(), lon: place.geometry.location.lng() })
+  }
+
+  const onDestPlaceChanged = () => {
+    const place = destRef.current?.getPlace()
+    if (!place?.geometry?.location) return
+    setDestText(place.formatted_address || place.name || "")
+    setDestCoords({ lat: place.geometry.location.lat(), lon: place.geometry.location.lng() })
+  }
 
   const days = getNextSevenDays()
 
@@ -135,15 +166,15 @@ export default function TripPlannerModal({
     setResult(null)
 
     try {
-      // 1. Geocode if needed (use pre-filled coords if origin/dest unchanged)
-      let oLat = initialOriginLat, oLon = initialOriginLon
-      let dLat = initialDestLat,  dLon = initialDestLon
+      // 1. Use autocomplete-resolved coords; fall back to geocoding if user typed manually
+      let oLat = originCoords?.lat, oLon = originCoords?.lon
+      let dLat = destCoords?.lat,   dLon = destCoords?.lon
 
-      if (originText !== initialOrigin || !oLat) {
+      if (!oLat || !oLon) {
         const g = await geocodeGoogle(originText)
         oLat = g.lat; oLon = g.lon
       }
-      if (destText !== initialDest || !dLat) {
+      if (!dLat || !dLon) {
         const g = await geocodeGoogle(destText)
         dLat = g.lat; dLon = g.lon
       }
@@ -283,15 +314,27 @@ export default function TripPlannerModal({
                 bg={INPUT_BG}
               >
                 <MapPin size={14} color={MUTED} />
-                <input
-                  value={originText}
-                  onChange={e => setOriginText(e.target.value)}
-                  placeholder="e.g. Tolichowki"
-                  style={{
-                    border: "none", background: "transparent",
-                    fontSize: "13px", color: PRIMARY, outline: "none", width: "100%",
-                  }}
-                />
+                {isLoaded ? (
+                  <Autocomplete
+                    onLoad={(ref) => (pickupRef.current = ref)}
+                    onPlaceChanged={onPickupPlaceChanged}
+                    options={{ componentRestrictions: { country: "in" }, bounds: new google.maps.LatLngBounds({ lat: 17.2, lng: 78.2 }, { lat: 17.6, lng: 78.7 }), strictBounds: false }}
+                  >
+                    <input
+                      value={originText}
+                      onChange={e => { setOriginText(e.target.value); setOriginCoords(null) }}
+                      placeholder="e.g. Tolichowki"
+                      style={{ border: "none", background: "transparent", fontSize: "13px", color: PRIMARY, outline: "none", width: "100%" }}
+                    />
+                  </Autocomplete>
+                ) : (
+                  <input
+                    value={originText}
+                    onChange={e => setOriginText(e.target.value)}
+                    placeholder="e.g. Tolichowki"
+                    style={{ border: "none", background: "transparent", fontSize: "13px", color: PRIMARY, outline: "none", width: "100%" }}
+                  />
+                )}
               </Flex>
             </Box>
             <Box flex={1}>
@@ -306,15 +349,27 @@ export default function TripPlannerModal({
                 bg={INPUT_BG}
               >
                 <MapPin size={14} color={TEAL} />
-                <input
-                  value={destText}
-                  onChange={e => setDestText(e.target.value)}
-                  placeholder="e.g. Hitech City"
-                  style={{
-                    border: "none", background: "transparent",
-                    fontSize: "13px", color: PRIMARY, outline: "none", width: "100%",
-                  }}
-                />
+                {isLoaded ? (
+                  <Autocomplete
+                    onLoad={(ref) => (destRef.current = ref)}
+                    onPlaceChanged={onDestPlaceChanged}
+                    options={{ componentRestrictions: { country: "in" }, bounds: new google.maps.LatLngBounds({ lat: 17.2, lng: 78.2 }, { lat: 17.6, lng: 78.7 }), strictBounds: false }}
+                  >
+                    <input
+                      value={destText}
+                      onChange={e => { setDestText(e.target.value); setDestCoords(null) }}
+                      placeholder="e.g. Hitech City"
+                      style={{ border: "none", background: "transparent", fontSize: "13px", color: PRIMARY, outline: "none", width: "100%" }}
+                    />
+                  </Autocomplete>
+                ) : (
+                  <input
+                    value={destText}
+                    onChange={e => setDestText(e.target.value)}
+                    placeholder="e.g. Hitech City"
+                    style={{ border: "none", background: "transparent", fontSize: "13px", color: PRIMARY, outline: "none", width: "100%" }}
+                  />
+                )}
               </Flex>
             </Box>
           </Flex>
@@ -398,11 +453,9 @@ export default function TripPlannerModal({
             const { plan, alternatives, bestMode, leaveHour, leaveMinute } = result
             const best = plan.best
             const modeName = bestMode
-              ? (bestMode.variant
-                  ? bestMode.variant.charAt(0).toUpperCase() + bestMode.variant.slice(1)
-                  : bestMode.mode.charAt(0).toUpperCase() + bestMode.mode.slice(1))
+              ? `${bestMode.mode}${bestMode.variant ? ` · ${bestMode.variant}` : ""}`
               : best.mode
-            const fareDisplay = bestMode?.cost_display ?? best.fare_display
+            const fareDisplay = bestMode?.cost_display ?? "—"
             const travelMin   = bestMode?.time_min ?? best.duration_min
             const filteredReasons = filterReasons(best.reasons, modeName)
 
