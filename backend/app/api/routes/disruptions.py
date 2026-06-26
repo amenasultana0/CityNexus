@@ -10,17 +10,19 @@ from typing import Any
 from math import radians, sin, cos, sqrt, atan2
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlmodel import select
 
 from app.api.deps import SessionDep
+from app.core.config import settings
 from app.models import DisruptionReport, DisruptionComment
 
 router = APIRouter(tags=["community"])
 
+# Local fallback directory (used only if Supabase is not configured)
 UPLOAD_DIR = Path("/app/uploads/disruptions")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -93,7 +95,12 @@ def _minutes_since(dt: datetime) -> int:
 
 
 def _to_response(d: DisruptionReport, comment_count: int = 0) -> DisruptionResponse:
-    photo_url = f"/uploads/disruptions/{d.photo_filename}" if d.photo_filename else None
+    if d.photo_filename is None:
+        photo_url = None
+    elif d.photo_filename.startswith("http"):
+        photo_url = d.photo_filename          # Supabase public URL stored directly
+    else:
+        photo_url = f"/uploads/disruptions/{d.photo_filename}"  # legacy local path
     return DisruptionResponse(
         id=d.id,
         lat=d.lat,
@@ -130,10 +137,36 @@ async def _save_photo(photo: UploadFile) -> str:
     contents = await photo.read()
     if len(contents) > MAX_PHOTO_BYTES:
         raise HTTPException(status_code=422, detail="Photo must be under 5 MB")
+
     ext = photo.filename.rsplit(".", 1)[-1].lower() if photo.filename and "." in photo.filename else "jpg"
     filename = f"{uuid.uuid4().hex}.{ext}"
-    (UPLOAD_DIR / filename).write_bytes(contents)
-    return filename
+
+    supabase_ready = (
+        settings.SUPABASE_URL
+        and settings.SUPABASE_SERVICE_KEY
+        and not settings.SUPABASE_SERVICE_KEY.startswith("your-")
+    )
+    if supabase_ready:
+        # Upload to Supabase Storage
+        upload_url = f"{settings.SUPABASE_URL}/storage/v1/object/{settings.SUPABASE_BUCKET}/{filename}"
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                upload_url,
+                content=contents,
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "Content-Type": photo.content_type or "image/jpeg",
+                },
+            )
+        if resp.status_code not in (200, 201):
+            raise HTTPException(status_code=500, detail=f"Photo upload failed: {resp.text}")
+        # Return full public URL — stored directly in photo_filename column
+        return f"{settings.SUPABASE_URL}/storage/v1/object/public/{settings.SUPABASE_BUCKET}/{filename}"
+    else:
+        # Fallback: local disk
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        (UPLOAD_DIR / filename).write_bytes(contents)
+        return filename
 
 
 # ── Disruption endpoints ──────────────────────────────────────
@@ -328,3 +361,15 @@ def post_comment(
     session.commit()
     session.refresh(comment)
     return _to_comment_response(comment)
+
+
+@router.delete("/disruptions/{report_id}/comments/{comment_id}")
+def delete_comment(report_id: int, comment_id: int, session: SessionDep) -> Any:
+    comment = session.get(DisruptionComment, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.report_id != report_id:
+        raise HTTPException(status_code=400, detail="Comment doesn't belong to this report")
+    session.delete(comment)
+    session.commit()
+    return {"ok": True}
