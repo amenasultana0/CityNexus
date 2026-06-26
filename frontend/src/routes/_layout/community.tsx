@@ -190,14 +190,6 @@ async function deleteComment(data: { reportId: number; commentId: number }): Pro
   if (!res.ok) throw new Error("Failed")
 }
 
-const MY_COMMENTS_KEY = "citynexus_my_comments"
-function getMyCommentIds(): Set<number> {
-  try { return new Set(JSON.parse(localStorage.getItem(MY_COMMENTS_KEY) ?? "[]")) } catch { return new Set() }
-}
-function saveMyCommentId(id: number) {
-  const ids = getMyCommentIds(); ids.add(id)
-  localStorage.setItem(MY_COMMENTS_KEY, JSON.stringify([...ids]))
-}
 
 async function submitReport(data: FormData): Promise<Disruption> {
   const res = await fetch("/api/v1/community/report", { method: "POST", body: data })
@@ -222,7 +214,6 @@ function CommentSection({ report, cat }: { report: Disruption; cat: ReturnType<t
   const qc = useQueryClient()
   const [commentText, setCommentText] = useState("")
   const [commentError, setCommentError] = useState("")
-  const [myIds, setMyIds] = useState<Set<number>>(() => getMyCommentIds())
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const commentsQuery = useQuery({
@@ -232,9 +223,7 @@ function CommentSection({ report, cat }: { report: Disruption; cat: ReturnType<t
 
   const commentMutation = useMutation({
     mutationFn: postComment,
-    onSuccess: (newComment) => {
-      saveMyCommentId(newComment.id)
-      setMyIds(getMyCommentIds())
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comments", report.id] })
       qc.invalidateQueries({ queryKey: ["disruptions"] })
       setCommentText("")
@@ -282,25 +271,23 @@ function CommentSection({ report, cat }: { report: Disruption; cat: ReturnType<t
                 <Text fontSize="0.78rem" color={PRIMARY} lineHeight="1.5">{c.text}</Text>
                 <Text fontSize="0.62rem" color={SUBTLE} mt={0.5}>{timeAgo(c.minutes_ago, c.posted_at)}</Text>
               </Box>
-              {myIds.has(c.id) && (
-                <button
-                  onClick={() => deleteMutation.mutate({ reportId: report.id, commentId: c.id })}
-                  disabled={deleteMutation.isPending}
-                  title="Delete your comment"
-                  style={{
-                    flexShrink: 0, width: "24px", height: "24px", borderRadius: "6px",
-                    border: "none", background: "transparent", cursor: "pointer",
-                    color: MUTED, fontSize: "12px", display: "flex",
-                    alignItems: "center", justifyContent: "center",
-                    opacity: deleteMutation.isPending ? 0.4 : 0.6,
-                    transition: "opacity 0.15s, color 0.15s",
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.color = RED)}
-                  onMouseLeave={e => (e.currentTarget.style.color = MUTED)}
-                >
-                  ✕
-                </button>
-              )}
+              <button
+                onClick={() => deleteMutation.mutate({ reportId: report.id, commentId: c.id })}
+                disabled={deleteMutation.isPending}
+                title="Delete comment"
+                style={{
+                  flexShrink: 0, width: "24px", height: "24px", borderRadius: "6px",
+                  border: "none", background: "transparent", cursor: "pointer",
+                  color: MUTED, fontSize: "12px", display: "flex",
+                  alignItems: "center", justifyContent: "center",
+                  opacity: deleteMutation.isPending ? 0.4 : 0.6,
+                  transition: "opacity 0.15s, color 0.15s",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = RED)}
+                onMouseLeave={e => (e.currentTarget.style.color = MUTED)}
+              >
+                ✕
+              </button>
             </Flex>
           ))}
           <div ref={bottomRef} />
