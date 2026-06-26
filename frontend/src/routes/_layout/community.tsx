@@ -161,7 +161,7 @@ interface CommentsResponse {
 }
 
 async function fetchDisruptions(lat: number, lon: number): Promise<DisruptionsResponse> {
-  const res = await fetch(`/api/v1/community/disruptions?lat=${lat}&lon=${lon}&radius_km=15`)
+  const res = await fetch(`/api/v1/community/disruptions?lat=${lat}&lon=${lon}&radius_km=25`)
   if (!res.ok) throw new Error("Failed")
   return res.json()
 }
@@ -636,7 +636,7 @@ function CommunityPage() {
 
           <Grid templateColumns={{ base: "1fr 1fr", md: "repeat(3,1fr)" }} gap={4}>
             {[
-              { label: "Live Reports", value: disruptions.length.toString(), unit: "within 15 km radius", accent: "#f87171", delay: "0s" },
+              { label: "Live Reports", value: disruptions.length.toString(), unit: "within 25 km radius", accent: "#f87171", delay: "0s" },
               { label: "Most Reported", value: topCategory ? getCategoryInfo(topCategory[0]).emoji : "—", unit: topCategory ? getCategoryInfo(topCategory[0]).label : "No reports yet", accent: "#fbbf24", delay: "0.08s" },
               { label: "Feed Status", value: "LIVE", unit: "Refreshes every 60s", accent: "#34d399", delay: "0.24s" },
             ].map((stat, i) => (
@@ -985,7 +985,7 @@ function CommunityPage() {
                     <Text fontSize="0.6rem" color="rgba(255,255,255,0.45)" fontWeight="700" letterSpacing="1.8px" textTransform="uppercase" mb={0.5}>
                       Live Disruption Map
                     </Text>
-                    <Heading size="sm" color="#fff" fontWeight="800">Hyderabad · 15 km radius</Heading>
+                    <Heading size="sm" color="#fff" fontWeight="800">Hyderabad · 25 km radius</Heading>
                   </Box>
                   <Flex align="center" gap={2} px={3} py={1.5} borderRadius="full"
                     style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)" }}>
